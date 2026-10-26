@@ -1,4 +1,4 @@
-<!doctype html><html lang="es"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><title>Takeoff Drywall</title>
+<!doctype html><html lang="en"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><title>Takeoff Drywall</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#1f56c3">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -92,6 +92,17 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .room-foot .tot{margin-left:auto;font-size:15px}
 .room-foot .tot b{font-size:18px;color:var(--accent)}
 .add-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.room-save{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.room-save .btn{min-height:50px;font-size:16px}
+.room.done{padding:0;border-color:var(--line);background:var(--surface2)}
+.room-sum{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%;border:0;background:transparent;padding:12px 14px;text-align:left;min-height:56px;border-radius:14px}
+.room-sum .ok{width:28px;height:28px;border-radius:50%;background:var(--mr);color:#fff;display:grid;place-items:center;font-weight:700;flex:none}
+.room-sum .rn{font-weight:600;font-size:17px}
+.room-sum .q{color:var(--muted)}
+.room-sum .calc{color:var(--muted);font-size:13px;font-family:var(--f-num)}
+.room-sum .tot{margin-left:auto;font-size:14px;color:var(--muted)}
+.room-sum .tot b{font-family:var(--f-num);font-size:18px;color:var(--accent)}
+.room-sum .ed{font-weight:600;color:var(--accent);font-size:14px}
 
 .empty{border:2px dashed var(--line);border-radius:14px;padding:26px;text-align:center;color:var(--muted)}
 
@@ -136,8 +147,8 @@ td input{min-height:38px;padding:6px 8px;width:90px;text-align:right}
   <div class="wrap">
     <div class="brand"><div class="mark" aria-hidden="true"></div>Takeoff <span class="pname" id="pname"></span></div>
     <div class="spacer"></div>
-    <div class="status" id="status"><i></i><span>Cargando…</span></div>
-    <button class="btn ghost sm" id="backBtn" hidden>Proyectos</button>
+    <div class="status" id="status"><i></i><span>Loading…</span></div>
+    <button class="btn ghost sm" id="backBtn" hidden>Projects</button>
   </div>
   <div class="wrap"><nav class="tabs" id="tabs" hidden></nav></div>
 </header>
@@ -146,12 +157,12 @@ td input{min-height:38px;padding:6px 8px;width:90px;text-align:right}
 
 <div class="bar" id="bar" hidden>
   <div class="wrap">
-    <div class="kpi main"><span class="lbl">Hojas totales</span><b id="k-tot">0</b></div>
+    <div class="kpi main"><span class="lbl">Total sheets</span><b id="k-tot">0</b></div>
     <div class="kpi w"><span class="lbl">Walls</span><b id="k-w">0</b></div>
     <div class="kpi c"><span class="lbl">Ceiling</span><b id="k-c">0</b></div>
     <div class="kpi m"><span class="lbl">MR</span><b id="k-m">0</b></div>
     <div class="spacer"></div>
-    <button class="btn primary" id="exportBtn">Exportar Excel</button>
+    <button class="btn primary" id="exportBtn">Export Excel</button>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -206,7 +217,7 @@ const lenTxt=n=>{if(!n)return '';const f=Math.floor(n+1e-9);const inch=Math.roun
 /* ---------- model ---------- */
 function newRoom(name=''){return{id:uid(),name,qty:'1',mode:'sf',walls:'',clg:'',mr:'',L:'',W:'',H:'',mrWalls:MR_HINT.test(name)};}
 function newProject(){
-  return{name:'Proyecto nuevo',address:'',levels:'',drawings:'',date:new Date().toISOString().slice(0,10),
+  return{name:'New project',address:'',levels:'',drawings:'',date:new Date().toISOString().slice(0,10),
     units:'1',assume:{...DEF_ASSUME},typical:[newRoom('')],common:[],mats:DEF_MATS.map(m=>({...m})),updatedAt:Date.now()};
 }
 function normalize(p){
@@ -260,20 +271,20 @@ function lsRead(){
 }
 function lsWrite(){
   // Preserve unreadable existing storage instead of silently overwriting it.
-  if(storageFailed){setStatus('local','No se pudo leer el guardado. No se guardarán cambios.');return false;}
+  if(storageFailed){setStatus('local','Saved data could not be read. Changes will not be saved.');return false;}
   try{localStorage.setItem(LS_KEY,JSON.stringify(projects));return true;}
-  catch(e){setStatus('local','No se pudo guardar: exporta Excel antes de cerrar.');return false;}
+  catch(e){setStatus('local','Could not save: export Excel before closing.');return false;}
 }
-function initStore(){projects=lsRead();if(storageFailed)setStatus('local','No se pudo leer el guardado. No se guardarán cambios.');else setStatus('local','Guardado solo en este dispositivo');render();}
+function initStore(){projects=lsRead();if(storageFailed)setStatus('local','Saved data could not be read. Changes will not be saved.');else setStatus('local','Saved on this device only');render();}
 const clean=p=>JSON.parse(JSON.stringify(p));
-function touch(){const p=projects[currentId];if(!p)return;p.updatedAt=Date.now();if(lsWrite())setStatus('local','Guardado solo en este dispositivo');}
-async function removeProject(id){delete projects[id];if(lsWrite())setStatus('local','Guardado solo en este dispositivo');}
+function touch(){const p=projects[currentId];if(!p)return;p.updatedAt=Date.now();if(lsWrite()){setStatus('local','Saved on this device only');return true;}return false;}
+async function removeProject(id){delete projects[id];if(lsWrite())setStatus('local','Saved on this device only');}
 
 /* ---------- rendering ---------- */
 function render(){
   const p=projects[currentId];
   $('#backBtn').hidden=!p;$('#tabs').hidden=!p;$('#bar').hidden=!p;
-  $('#pname').textContent=p?'· '+(p.name||'Sin nombre'):'';
+  $('#pname').textContent=p?'· '+(p.name||'Untitled'):'';
   if(!p){renderHome();return;}
   renderTabs(p);
   const m=$('#main');
@@ -283,60 +294,62 @@ function render(){
   refreshAll();
 }
 function renderTabs(p){
-  const t=[['project','Proyecto',''],['typical','Unidad típica',p.typical.length],['common','Áreas comunes',p.common.length],['summary','Resumen','']];
+  const t=[['project','Project',''],['typical','Typical unit',p.typical.length],['common','Common areas',p.common.length],['summary','Summary','']];
   $('#tabs').innerHTML=t.map(([k,l,c])=>`<button data-tab="${k}" class="${tab===k?'on':''}">${l}${c!==''?`<span class="count">${c}</span>`:''}</button>`).join('');
 }
 function renderHome(){
   const list=Object.entries(projects).filter(([,p])=>p&&!p._deleted).sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0));
   $('#main').innerHTML=`
-  <div class="sec-head"><div><h2>Proyectos</h2><p>Cada proyecto es un takeoff: unidad típica, áreas comunes y materiales.</p></div><div class="spacer"></div>
-  <button class="btn primary" data-act="newp">+ Nuevo proyecto</button></div>
+  <div class="sec-head"><div><h2>Projects</h2><p>Each project is one takeoff: typical unit, common areas and materials.</p></div><div class="spacer"></div>
+  <button class="btn primary" data-act="newp">+ New project</button></div>
   ${list.length?`<div class="plist">${list.map(([id,p])=>{const c=projCalc(normalize(p));return`
     <div class="pcard">
-      <h3>${esc(p.name||'Sin nombre')}</h3>
-      <div class="meta">${esc([p.address,p.levels].filter(Boolean).join(' · ')||'Sin dirección')}</div>
-      <div class="meta">${val(p.units)} unidades · ${p.typical.length} cuartos típicos · ${p.common.length} áreas comunes</div>
-      <div><span class="big">${fmt0(c.grand.tot)}</span> <span class="meta">hojas</span></div>
-      <div class="row"><button class="btn primary sm" data-open="${id}">Abrir</button><button class="btn sm" data-dupp="${id}">Duplicar</button><button class="btn sm danger" data-delp="${id}">Borrar</button></div>
+      <h3>${esc(p.name||'Untitled')}</h3>
+      <div class="meta">${esc([p.address,p.levels].filter(Boolean).join(' · ')||'No address')}</div>
+      <div class="meta">${val(p.units)} units · ${p.typical.length} typical rooms · ${p.common.length} common areas</div>
+      <div><span class="big">${fmt0(c.grand.tot)}</span> <span class="meta">sheets</span></div>
+      <div class="row"><button class="btn primary sm" data-open="${id}">Open</button><button class="btn sm" data-dupp="${id}">Duplicate</button><button class="btn sm danger" data-delp="${id}">Delete</button></div>
     </div>`;}).join('')}</div>`
-  :`<div class="empty"><p><b>Todavía no hay proyectos.</b></p><p>Toca “Nuevo proyecto” para empezar un takeoff. Se guarda solo mientras escribes.</p></div>`}`;
+  :`<div class="empty"><p><b>No projects yet.</b></p><p>Tap “New project” to start a takeoff. It saves automatically as you type.</p></div>`}`;
 }
 function projectHTML(p){
   const A=p.assume;
-  return`<div class="sec-head"><div><h2>Datos del proyecto</h2><p>Encabezado del takeoff y supuestos de cálculo.</p></div></div>
+  return`<div class="sec-head"><div><h2>Project info</h2><p>Takeoff header and calculation assumptions.</p></div></div>
   <div class="panel"><div class="grid g2">
-    ${pf('name','Proyecto',p.name)}${pf('address','Dirección',p.address)}${pf('levels','Niveles / alcance',p.levels)}${pf('drawings','Planos / escala',p.drawings)}
-    <label class="field"><span class="lbl">Fecha</span><input type="date" id="p-date" data-p="date" value="${esc(p.date)}"></label>
-    <label class="field"><span class="lbl"># de unidades típicas</span><input id="p-units" data-p="units" inputmode="decimal" value="${esc(p.units)}"></label>
+    ${pf('name','Project',p.name)}${pf('address','Address',p.address)}${pf('levels','Levels / Scope',p.levels)}${pf('drawings','Drawings / Scale',p.drawings)}
+    <label class="field"><span class="lbl">Date</span><input type="date" id="p-date" data-p="date" value="${esc(p.date)}"></label>
+    <label class="field"><span class="lbl"># of typical units</span><input id="p-units" data-p="units" inputmode="decimal" value="${esc(p.units)}"></label>
   </div></div>
-  <div class="panel"><div class="lbl" style="margin-bottom:10px">Supuestos</div><div class="grid g5">
-    ${af('wall','Hoja walls (ft²)',A.wall,'s-w')}${af('clg','Hoja ceiling (ft²)',A.clg,'s-c')}${af('mr','Hoja MR (ft²)',A.mr,'s-m')}
-    <label class="field"><span class="lbl">Desperdicio %</span><input id="a-waste" data-a="waste" inputmode="decimal" value="${esc(Math.round((+A.waste||0)*1000)/10)}"></label>
-    ${af('h','Altura de techo (ft)',A.h,'')}
-  </div><p class="note">Hojas = ROUNDUP(ft² ÷ tamaño de hoja × (1 + desperdicio)). 54 ft² = hoja 4×13.5; 48 ft² = 4×12.</p></div>`;
+  <div class="panel"><div class="lbl" style="margin-bottom:10px">Assumptions</div><div class="grid g5">
+    ${af('wall','Sheet size – Walls (ft²)',A.wall,'s-w')}${af('clg','Sheet size – Ceiling (ft²)',A.clg,'s-c')}${af('mr','Sheet size – MR (ft²)',A.mr,'s-m')}
+    <label class="field"><span class="lbl">Waste %</span><input id="a-waste" data-a="waste" inputmode="decimal" value="${esc(Math.round((+A.waste||0)*1000)/10)}"></label>
+    ${af('h','Ceiling height (ft)',A.h,'')}
+  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12.</p></div>`;
 }
 const pf=(k,l,v)=>`<label class="field"><span class="lbl">${l}</span><input id="p-${k}" data-p="${k}" value="${esc(v)}" enterkeyhint="next"></label>`;
 const af=(k,l,v,c)=>`<label class="field ${c?'surf '+c:''}"><span class="lbl">${l}</span><input id="a-${k}" data-a="${k}" inputmode="decimal" value="${esc(v)}"></label>`;
 
 function sectionHTML(p,sec){
   const list=p[sec];
-  const title=sec==='typical'?'Unidad típica':'Áreas comunes';
-  const sub=sec==='typical'?`Medidas de UNA unidad. Se multiplican por ${val(p.units)} unidades.`:'Corredores, escaleras, lobby y demás áreas fuera de las unidades.';
+  const title=sec==='typical'?'Typical unit':'Common areas';
+  const sub=sec==='typical'?`Measurements for ONE unit. Multiplied by ${val(p.units)} units.`:'Corridors, stairs, lobby and other areas outside the units.';
   return`<div class="sec-head"><div><h2>${title}</h2><p>${sub}</p></div>
-    ${sec==='typical'?`<div class="spacer"></div><label class="field" style="width:150px"><span class="lbl"># de unidades</span><input id="p-units2" data-p="units" inputmode="decimal" value="${esc(p.units)}"></label>`:''}</div>
-  <div class="lbl">Agregar rápido</div>
+    ${sec==='typical'?`<div class="spacer"></div><label class="field" style="width:150px"><span class="lbl"># of units</span><input id="p-units2" data-p="units" inputmode="decimal" value="${esc(p.units)}"></label>`:''}</div>
+  <div class="lbl">Quick add</div>
   <div class="chips">${CHIPS[sec].map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>
-  <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):`<div class="empty">Sin cuartos todavía. Toca un nombre arriba o “Agregar cuarto”.</div>`}</div>
-  <div class="add-row"><button class="btn primary" data-act="add">+ Agregar cuarto</button></div>
-  <p class="note">En los campos de ft² puedes escribir sumas: <span class="num">120+85+42</span> o <span class="num">12x9</span>. En medidas acepta <span class="num">12'6</span>, <span class="num">12 6</span> o <span class="num">12.5</span>.</p>`;
+  <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`}</div>
+  <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
+  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12 6</span> or <span class="num">12.5</span>.</p>`;
 }
+const compactHTML=r=>`<div class="room done" data-id="${r.id}"><button class="room-sum" data-act="edit" aria-label="Edit ${esc(r.name)}"><span class="ok" aria-hidden="true">✓</span><span class="rn">${esc(r.name||'Untitled')}</span><span class="q num">×${esc(r.qty)}</span><span class="calc" data-o="sum"></span><span class="tot">Total sheets <b data-o="tot">0</b></span><span class="ed">Edit</span></button></div>`;
 function roomHTML(r){
+  if(r.done)return compactHTML(r);
   const body=r.mode==='dim'?`
     <div class="dims">
-      <label class="field"><span class="lbl">Largo</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12'6" value="${esc(r.L)}" enterkeyhint="next"></label>
-      <label class="field"><span class="lbl">Ancho</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next"></label>
-      <label class="field"><span class="lbl">Altura</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="${esc(projects[currentId].assume.h)}' (default)" value="${esc(r.H)}" enterkeyhint="next"></label>
-      <label class="toggle"><input type="checkbox" id="r-${r.id}-mrw" data-f="mrWalls" ${r.mrWalls?'checked':''}>Paredes MR</label>
+      <label class="field"><span class="lbl">Length</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12'6" value="${esc(r.L)}" enterkeyhint="next"></label>
+      <label class="field"><span class="lbl">Width</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next"></label>
+      <label class="field"><span class="lbl">Height</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="${esc(projects[currentId].assume.h)}' (default)" value="${esc(r.H)}" enterkeyhint="next"></label>
+      <label class="toggle"><input type="checkbox" id="r-${r.id}-mrw" data-f="mrWalls" ${r.mrWalls?'checked':''}>MR walls</label>
     </div>
     <div class="surfaces">
       <div class="surf s-w"><span class="lbl">Walls ft²</span><b class="num" data-o="w">0</b><span class="calc" data-o="wsx"></span></div>
@@ -348,21 +361,22 @@ function roomHTML(r){
     </div>`;
   return`<div class="room" data-id="${r.id}">
     <div class="room-head">
-      <label class="field"><span class="lbl">Cuarto</span><input class="rname" id="r-${r.id}-name" data-f="name" value="${esc(r.name)}" placeholder="Nombre" enterkeyhint="next"></label>
-      <label class="field"><span class="lbl">Cant.</span><input id="r-${r.id}-qty" data-f="qty" inputmode="decimal" value="${esc(r.qty)}" enterkeyhint="next"></label>
-      <div class="seg" role="group" aria-label="Forma de captura"><button data-mode="sf" class="${r.mode!=='dim'?'on':''}">ft²</button><button data-mode="dim" class="${r.mode==='dim'?'on':''}">Medidas</button></div>
-      <div class="racts"><button class="icon-btn" data-act="dup" title="Duplicar" aria-label="Duplicar">⧉</button><button class="icon-btn" data-act="del" title="Borrar" aria-label="Borrar">✕</button></div>
+      <label class="field"><span class="lbl">Room</span><input class="rname" id="r-${r.id}-name" data-f="name" value="${esc(r.name)}" placeholder="Name" enterkeyhint="next"></label>
+      <label class="field"><span class="lbl">Qty</span><input id="r-${r.id}-qty" data-f="qty" inputmode="decimal" value="${esc(r.qty)}" enterkeyhint="next"></label>
+      <div class="seg" role="group" aria-label="Entry mode"><button data-mode="sf" class="${r.mode!=='dim'?'on':''}">ft²</button><button data-mode="dim" class="${r.mode==='dim'?'on':''}">Dimensions</button></div>
+      <div class="racts"><button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button><button class="icon-btn" data-act="del" title="Delete" aria-label="Delete">✕</button></div>
     </div>
     ${body}
-    <div class="room-foot"><span>Hojas por cuarto <b data-o="per">0</b></span><span class="tot">Total hojas <b data-o="tot">0</b></span></div>
+    <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
+    <div class="room-save"><button class="btn" data-act="done">✓ Save room</button><button class="btn primary" data-act="donenext">Save &amp; add another</button></div>
   </div>`;
 }
 const sfIn=(r,k,l,c,o)=>`<label class="surf ${c}"><span class="lbl">${l}</span><input id="r-${r.id}-${k}" data-f="${k}" inputmode="decimal" value="${esc(r[k])}" enterkeyhint="next"><span class="calc" data-o="${o}"></span></label>`;
 
 function summaryHTML(p){
-  return`<div class="sec-head"><div><h2>Resumen</h2><p>Igual que tu hoja: Project Summary y Materials.</p></div><div class="spacer"></div><button class="btn primary" data-act="export">Exportar Excel</button></div>
+  return`<div class="sec-head"><div><h2>Summary</h2><p>Same as your sheet: Project Summary and Materials.</p></div><div class="spacer"></div><button class="btn primary" data-act="export">Export Excel</button></div>
   <div class="tbl"><table id="sumT"></table></div>
-  <div class="lbl" style="margin:18px 0 8px">Materiales (puedes ajustar tasa y empaque)</div>
+  <div class="lbl" style="margin:18px 0 8px">Materials (rate and pack size are editable)</div>
   <div class="tbl"><table id="matT"></table></div>`;
 }
 
@@ -374,18 +388,19 @@ function refreshAll(){
     const c=roomCalc(r,A);
     const set=(k,v)=>{const o=el.querySelector(`[data-o="${k}"]`);if(o)o.textContent=v;};
     set('per',fmt0(c.per));set('tot',fmt0(c.tot));
+    set('sum',[c.w&&`W ${fmt(c.w)}`,c.c&&`C ${fmt(c.c)}`,c.m&&`MR ${fmt(c.m)}`].filter(Boolean).join(' · ')+(c.w||c.c||c.m?' ft²':''));
     set('w',fmt(c.w));set('c',fmt(c.c));set('m',fmt(c.m));
-    const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} hojas`:'');};
-    set('wsx',r.mode==='dim'?(c.w?c.ws+' hojas':''):ex('walls',c.w,c.ws));
-    set('csx',r.mode==='dim'?(c.c?c.cs+' hojas':''):ex('clg',c.c,c.cs));
-    set('msx',r.mode==='dim'?(c.m?c.ms+' hojas':''):ex('mr',c.m,c.ms));
+    const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} sheets`:'');};
+    set('wsx',r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
+    set('csx',r.mode==='dim'?(c.c?c.cs+' sheets':''):ex('clg',c.c,c.cs));
+    set('msx',r.mode==='dim'?(c.m?c.ms+' sheets':''):ex('mr',c.m,c.ms));
   });
   const t=projCalc(p);
   $('#k-tot').textContent=fmt0(t.grand.tot);$('#k-w').textContent=fmt0(t.sheets.w);$('#k-c').textContent=fmt0(t.sheets.c);$('#k-m').textContent=fmt0(t.sheets.m);
-  $('#pname').textContent='· '+(p.name||'Sin nombre');
+  $('#pname').textContent='· '+(p.name||'Untitled');
   const sT=$('#sumT');
   if(sT){
-    sT.innerHTML=`<thead><tr><th>Área</th><th># Unidades</th><th>ft² Walls</th><th>ft² Ceiling</th><th>ft² MR</th><th>Total hojas</th></tr></thead><tbody>
+    sT.innerHTML=`<thead><tr><th>Area</th><th># of Units</th><th>ft² Walls</th><th>ft² Ceiling</th><th>ft² MR</th><th>Total Sheets</th></tr></thead><tbody>
       <tr><td>Typical Units</td><td class="num">${fmt(t.u)}</td><td class="num">${fmt(t.typ.w)}</td><td class="num">${fmt(t.typ.c)}</td><td class="num">${fmt(t.typ.m)}</td><td class="num">${fmt0(t.typ.tot)}</td></tr>
       <tr><td>Common Areas</td><td>N/A</td><td class="num">${fmt(t.cs.w)}</td><td class="num">${fmt(t.cs.c)}</td><td class="num">${fmt(t.cs.m)}</td><td class="num">${fmt0(t.cs.tot)}</td></tr>
       <tr class="grand"><td>GRAND TOTAL</td><td class="num">${fmt(t.u)}</td><td class="num">${fmt(t.grand.w)}</td><td class="num">${fmt(t.grand.c)}</td><td class="num">${fmt(t.grand.m)}</td><td class="num">${fmt0(t.grand.tot)}</td></tr></tbody>`;
@@ -394,7 +409,7 @@ function refreshAll(){
   if(mT){
     const active=document.activeElement&&document.activeElement.id;
     if(!mT.dataset.built){
-      mT.innerHTML=`<thead><tr><th>Material</th><th>Base ft²</th><th>Tasa</th><th>Unidad tasa</th><th>Cant. (+desp.)</th><th>Empaque</th><th>Unidad empaque</th><th>A pedir</th></tr></thead><tbody>${p.mats.map((m,i)=>`
+      mT.innerHTML=`<thead><tr><th>Material</th><th>Basis ft²</th><th>Usage Rate</th><th>Rate Unit</th><th>Qty (+ waste)</th><th>Pack Size</th><th>Pack Unit</th><th>Packs to Order</th></tr></thead><tbody>${p.mats.map((m,i)=>`
         <tr><td>${esc(m.name)}</td><td class="num" data-mo="${i}-b"></td><td><input class="num" id="m-${i}-rate" data-m="${i}.rate" inputmode="decimal" value="${esc(m.rate)}"></td><td>${esc(m.rateUnit)}</td>
         <td class="num" data-mo="${i}-q"></td><td><input class="num" id="m-${i}-pack" data-m="${i}.pack" inputmode="decimal" value="${esc(m.pack)}"></td><td>${esc(m.packUnit)}</td><td class="num"><b data-mo="${i}-p"></b></td></tr>`).join('')}</tbody>`;
       mT.dataset.built='1';
@@ -435,37 +450,50 @@ document.addEventListener('click',async e=>{
   if(b.id==='exportBtn'||b.dataset.act==='export'){exportXlsx();return;}
   if(b.dataset.act==='newp'){const id=uid();projects[id]=newProject();currentId=id;tab='project';touch();render();setTimeout(()=>{const n=$('#p-name');n&&(n.focus(),n.select());},50);return;}
   if(b.dataset.open){currentId=b.dataset.open;normalize(projects[currentId]);tab='typical';render();window.scrollTo(0,0);return;}
-  if(b.dataset.dupp){const id=uid();const c=clean(projects[b.dataset.dupp]);c.name=(c.name||'')+' (copia)';c.updatedAt=Date.now();[...c.typical,...c.common].forEach(r=>r.id=uid());projects[id]=c;currentId=id;touch();currentId=null;render();toast('Proyecto duplicado');return;}
+  if(b.dataset.dupp){const id=uid();const c=clean(projects[b.dataset.dupp]);c.name=(c.name||'')+' (copy)';c.updatedAt=Date.now();[...c.typical,...c.common].forEach(r=>r.id=uid());projects[id]=c;currentId=id;touch();currentId=null;render();toast('Project duplicated');return;}
   if(b.dataset.delp){
-    if(b.dataset.armed){await removeProject(b.dataset.delp);render();toast('Proyecto borrado');}
-    else{b.dataset.armed='1';b.textContent='¿Seguro? Toca otra vez';b.classList.add('primary');setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='Borrar';b.classList.remove('primary');}},3000);}
+    if(b.dataset.armed){await removeProject(b.dataset.delp);render();toast('Project deleted');}
+    else{b.dataset.armed='1';b.textContent='Sure? Tap again';b.classList.add('primary');setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='Delete';b.classList.remove('primary');}},3000);}
     return;
   }
   const p=projects[currentId];if(!p)return;
-  if(b.dataset.chip||b.dataset.act==='add'){
-    const r=newRoom(b.dataset.chip||'');p[tab].push(r);touch();renderTabs(p);
-    const wrap=$('#rooms');
-    if(wrap.querySelector('.empty'))wrap.innerHTML='';
-    wrap.insertAdjacentHTML('beforeend',roomHTML(r));refreshAll();
-    const el=document.getElementById(b.dataset.chip?`r-${r.id}-qty`:`r-${r.id}-name`);
-    el.scrollIntoView({block:'center',behavior:'smooth'});el.focus();el.select&&el.select();
-    return;
-  }
+  if(b.dataset.chip||b.dataset.act==='add'){addRoom(p,b.dataset.chip||'');return;}
   const room=b.closest('.room');if(!room)return;
   const id=room.dataset.id,sec=secOf(id),list=p[sec],idx=list.findIndex(r=>r.id===id);
+  if(b.dataset.act==='done'||b.dataset.act==='donenext'){
+    const r=list[idx];
+    if(!String(r.name||'').trim()){const n=document.getElementById(`r-${r.id}-name`);n&&n.focus();toast('Name the room before saving it');return;}
+    r.done=true;if(!touch()){r.done=false;toast('Could not save the room. Export Excel before closing.');return;}
+    room.outerHTML=roomHTML(r);refreshAll();
+    toast(`${r.name} saved ✓`);
+    if(b.dataset.act==='donenext')addRoom(p,'');
+    return;
+  }
+  if(b.dataset.act==='edit'){
+    list[idx].done=false;touch();room.outerHTML=roomHTML(list[idx]);refreshAll();
+    const n=document.getElementById(`r-${id}-qty`);n&&n.focus();return;
+  }
   if(b.dataset.mode){list[idx].mode=b.dataset.mode;touch();room.outerHTML=roomHTML(list[idx]);refreshAll();return;}
-  if(b.dataset.act==='dup'){const c={...clean(list[idx]),id:uid()};list.splice(idx+1,0,c);touch();renderTabs(p);room.insertAdjacentHTML('afterend',roomHTML(c));refreshAll();toast('Cuarto duplicado');return;}
+  if(b.dataset.act==='dup'){const c={...clean(list[idx]),id:uid()};list.splice(idx+1,0,c);touch();renderTabs(p);room.insertAdjacentHTML('afterend',roomHTML(c));refreshAll();toast('Room duplicated');return;}
   if(b.dataset.act==='del'){
-    if(b.dataset.armed){list.splice(idx,1);touch();renderTabs(p);room.remove();if(!list.length)$('#rooms').innerHTML='<div class="empty">Sin cuartos todavía. Toca un nombre arriba o “Agregar cuarto”.</div>';refreshAll();}
-    else{b.dataset.armed='1';b.textContent='Borrar';b.classList.add('confirm');setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='✕';b.classList.remove('confirm');}},3000);}
+    if(b.dataset.armed){list.splice(idx,1);touch();renderTabs(p);room.remove();if(!list.length)$('#rooms').innerHTML='<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>';refreshAll();}
+    else{b.dataset.armed='1';b.textContent='Delete';b.classList.add('confirm');setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='✕';b.classList.remove('confirm');}},3000);}
   }
 });
+function addRoom(p,name){
+  const r=newRoom(name);p[tab].push(r);touch();renderTabs(p);
+  const wrap=$('#rooms');if(!wrap)return;
+  if(wrap.querySelector('.empty'))wrap.innerHTML='';
+  wrap.insertAdjacentHTML('beforeend',roomHTML(r));refreshAll();
+  const el=document.getElementById(name?`r-${r.id}-qty`:`r-${r.id}-name`);
+  if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.focus();el.select&&el.select();}
+}
 let toastT;function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600);}
 
 /* ---------- Excel export (same layout as the Template sheet, live formulas) ---------- */
 async function exportXlsx(){
   const p=projects[currentId];if(!p)return;
-  if(!window.ExcelJS){toast('No cargó el generador de Excel. Recarga la aplicación.');return;}
+  if(!window.ExcelJS){toast('The Excel generator did not load. Reload the app.');return;}
   const A=p.assume,t=projCalc(p);
   const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Takeoff',{views:[{showGridLines:false}]});
   ws.columns=[{width:3},{width:34},{width:12},{width:13},{width:13},{width:13},{width:13},{width:13},{width:26},{width:14},{width:14},{width:22}];
@@ -540,20 +568,20 @@ async function exportXlsx(){
   try{
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const fname=`Takeoff - ${(p.name||'Proyecto').replace(/[\\/:*?"<>|]/g,'-')}.xlsx`;
+    const fname=`Takeoff - ${(p.name||'Project').replace(/[\\/:*?"<>|]/g,'-')}.xlsx`;
     const url=URL.createObjectURL(blob);
     const link=document.createElement('a');link.href=url;link.download=fname;
     document.body.appendChild(link);link.click();link.remove();
     // Safari may still be consuming the URL after the click.
     setTimeout(()=>URL.revokeObjectURL(url),60000);
-    toast('Excel generado. Revisa Descargas en Safari.');
-  }catch(err){console.error('Excel export failed',err);toast('No se pudo generar el Excel. Intenta de nuevo.');}
+    toast('Excel generated. Check Downloads in Safari.');
+  }catch(err){console.error('Excel export failed',err);toast('Could not generate Excel. Try again.');}
 
 }
 
 render();initStore();
 if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1')){
-  navigator.serviceWorker.register('./sw.js').catch(err=>{console.error(err);toast('No se activó el modo sin conexión. Recarga con conexión.');});
+  navigator.serviceWorker.register('./sw.js').catch(err=>{console.error(err);toast('Offline mode could not start. Reload while online.');});
 }
 })();
 </script>

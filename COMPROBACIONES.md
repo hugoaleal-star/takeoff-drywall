@@ -1,15 +1,15 @@
-# Comprobaciones realizadas
+# Comprobaciones de la actualización
 
-- 100 proyectos comparados contra las funciones de cálculo del HTML original: resultados idénticos para áreas, hojas, desperdicio, cantidades, multiplicación de unidades y empaques de materiales. Incluyen captura por expresiones, dimensiones, paredes MR y áreas comunes.
-- Sintaxis de JavaScript de la aplicación y del service worker validada.
-- Exportación ejecutada con ExcelJS incluido: Blob con MIME XLSX, activación del enlace de descarga, archivo generado y reabierto. Verificados 247 ft² de walls, 108 ft² de ceiling, 20 hojas por conjunto de cuartos y 60 hojas para tres unidades, además de las fórmulas SUM de totales.
-- Almacenamiento probado con persistencia, relectura y error de cuota: el error no muestra falsamente «Guardado».
-- Manifest e iconos presentes; sin llamadas a window.claude ni recursos de ejecución externos.
-- Service worker probado con caché simulada: archivos de precarga existentes, instalación, activación, respuesta offline para HTML, ExcelJS e iconos, fallback de navegación y conservación de cachés ajenas.
-- Navegador integrado: creación y edición de proyecto, cálculo de 60 hojas, persistencia tras recargar, reapertura y resumen verificados visualmente. La exportación mostró «Excel generado».
+Fuente: Takeoff Drywall3.html proporcionado por el usuario.
 
-## Límites de la verificación
+- 100 casos de cálculo comparados contra esta fuente: resultados idénticos para áreas, hojas, cantidades, desperdicio y materiales.
+- Save room probado: compacta el cuarto y persiste done en el guardado local.
+- Edit probado: reabre el cuarto para editarlo.
+- Save & add another probado: guarda el cuarto y añade otro sin alterar los totales existentes.
+- Corregida la llamada a flush del nuevo flujo: se usa el guardado local inmediato; si falla, no muestra una confirmación falsa de cuarto guardado.
+- Excel generado y reabierto: valores, MIME, fórmulas y activación del enlace de descarga verificados.
+- Almacenamiento probado: escritura, relectura y aviso por falta de espacio.
+- Sintaxis JavaScript, manifest, rutas de iconos y ausencia de dependencias de Claude y recursos externos comprobadas.
+- Service worker v2 probado con caché simulada: precarga, activación, respuesta offline y fallback de navegación. Conserva cachés ajenas.
 
-El entorno impidió arrancar Chromium y WebKit de Playwright por restricciones del sistema. La comprobación visual se hizo en el navegador integrado. No se ha verificado en un iPad físico, ni la instalación desde Safari, ni la descarga real en Safari, ni una sesión real en modo avión. Las pruebas del service worker son de lógica con caché simulada. La guía incluye los pasos para esas comprobaciones finales después de publicar en HTTPS.
-
-La aplicación se entrega lista para publicar; no se ha desplegado en un servidor público. No tiene backend ni sincronización remota.
+Las pruebas de flujos usan un DOM simulado y las pruebas de caché usan almacenamiento simulado. Esta actualización no se ha comprobado visualmente en Safari ni en un iPad físico, ni se ha publicado desde esta conversación. Después de publicar, comprueba los nuevos botones, proyectos anteriores, descarga Excel, orientación y modo avión. No hay backend ni sincronización remota.
