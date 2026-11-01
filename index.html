@@ -80,7 +80,8 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .icon-btn{width:46px;height:46px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);display:grid;place-items:center;font-size:18px}
 .icon-btn.confirm{background:var(--danger);color:#fff;border-color:var(--danger);width:auto;padding:0 12px;font-size:14px;font-weight:600}
 .surfaces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.dims{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end}
+.dims{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:start}
+.dims .toggle{margin-top:24px}
 .surf{display:flex;flex-direction:column;gap:5px;min-width:0;border-left:4px solid var(--c);padding-left:8px}
 .surf .lbl{color:var(--c)}
 .surf .calc{font-size:13px;color:var(--muted);min-height:18px;font-family:var(--f-num)}
@@ -103,6 +104,9 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .ctr-tot{grid-column:1/-1;font-size:14px;color:var(--muted)}
 .ctr-tot b{color:var(--accent);font-size:18px}
 @media (max-width:640px){.ctr-edit{grid-template-columns:minmax(0,1fr)}}
+.hq{display:flex;gap:6px;flex-wrap:wrap}
+.hq-b{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);font-family:var(--f-num);font-size:14px;font-weight:600}
+.hq-b.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .room-save{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 .room-save .btn{min-height:50px;font-size:16px}
 .room.done{padding:0;border-color:var(--line);background:var(--surface2)}
@@ -433,7 +437,7 @@ function roomHTML(r){
     <div class="dims">
       <label class="field"><span class="lbl">Length</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12' 6 1/2&quot;" value="${esc(r.L)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Lx"></span></label>
       <label class="field"><span class="lbl">Width</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Wx"></span></label>
-      <label class="field"><span class="lbl">Height</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Default" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span></label>
+      <label class="field"><span class="lbl">Height</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Default" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span><span class="hq" role="group" aria-label="Quick height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</span></label>
       <label class="toggle"><input type="checkbox" id="r-${r.id}-mrw" data-f="mrWalls" ${r.mrWalls?'checked':''}>MR walls</label>
     </div>
     <div class="surfaces">
@@ -478,7 +482,8 @@ function refreshAll(){
     set('w',fmt(c.w));set('c',fmt(c.c));set('m',fmt(c.m));
     if(r.mode==='dim'){
       const show=raw=>{const v=parseLen(raw);return String(raw||'').trim()?(v?`= ${lenTxt(v)}`:'Not a length'):'';};
-      set('Lx',show(r.L));set('Wx',show(r.W));set('Hx',String(r.H||'').trim()?show(r.H)+' (this room only)':`Using ${lenTxt(hdv||+A.h)} from ${hdv?esc(loc.ctr.name||'this group'):'project'}`);
+      set('Lx',show(r.L));set('Wx',show(r.W));el.querySelectorAll('[data-hq]').forEach(x=>x.classList.toggle('on',String(r.H||'').trim()!==''&&parseLen(r.H)===+x.dataset.hq));
+      set('Hx',String(r.H||'').trim()?show(r.H)+' (this room only)':`Using ${lenTxt(hdv||+A.h)} from ${hdv?esc(loc.ctr.name||'this group'):'project'}`);
     }
     const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} sheets`:'');};
     set('wsx',r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
@@ -573,6 +578,7 @@ document.addEventListener('click',async e=>{
   const room=b.closest('.room');if(!room)return;
   const id=room.dataset.id,loc=locate(id);if(!loc)return;
   const list=loc.list,idx=loc.idx;
+  if(b.dataset.hq){const r=list[idx];const v=b.dataset.hq+"'";r.H=(String(r.H||'').trim()!==''&&parseLen(r.H)===+b.dataset.hq)?'':v;const inp=document.getElementById(`r-${r.id}-H`);if(inp)inp.value=r.H;touch();refreshAll();return;}
   if(b.dataset.act==='done'||b.dataset.act==='donenext'){
     const r=list[idx];
     if(!String(r.name||'').trim()){const n=document.getElementById(`r-${r.id}-name`);n&&n.focus();toast('Name the room before saving it');return;}
