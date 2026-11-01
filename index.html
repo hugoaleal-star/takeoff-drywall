@@ -6,7 +6,6 @@
 <meta name="apple-mobile-web-app-title" content="Takeoff">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 </head><body>
-
 <style>
 /* Layout: field tablet tool — sticky header + tabs, stacked room cards, sticky totals bar at the bottom. Surface colors follow the board: grey = regular, blue = ceiling, green = MR (green board). */
 :root{
@@ -68,6 +67,7 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
 .chip{border:1px dashed var(--line);background:var(--surface2);border-radius:999px;padding:8px 14px;min-height:42px;font-weight:500}
 .chip b{color:var(--accent);margin-right:4px}
+.chip-lbl{font-size:13px;font-weight:600;color:var(--muted);margin-top:4px}
 
 .rooms{display:flex;flex-direction:column;gap:10px}
 .room{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px}
@@ -92,6 +92,17 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .room-foot .tot{margin-left:auto;font-size:15px}
 .room-foot .tot b{font-size:18px;color:var(--accent)}
 .add-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.ctr-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pill{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;min-height:46px;font-family:var(--f-display);font-weight:600;font-size:17px}
+.pill .num{font-size:13px;color:var(--muted);margin-left:2px}
+.pill.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pill.on .num{color:inherit;opacity:.8}
+.pill.add{border-style:dashed;background:transparent;color:var(--accent)}
+.ctr-edit{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:12px;align-items:end;margin-bottom:14px}
+.ctr-acts{display:flex;gap:8px;flex-wrap:wrap}
+.ctr-tot{grid-column:1/-1;font-size:14px;color:var(--muted)}
+.ctr-tot b{color:var(--accent);font-size:18px}
+@media (max-width:640px){.ctr-edit{grid-template-columns:minmax(0,1fr)}}
 .room-save{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 .room-save .btn{min-height:50px;font-size:16px}
 .room.done{padding:0;border-color:var(--line);background:var(--surface2)}
@@ -180,10 +191,12 @@ const DEF_MATS=[
  {name:'Fire tape',basis:'all',rate:0.37,rateUnit:'LF per ft²',qtyUnit:'LF',pack:500,packUnit:'LF / roll'}
 ];
 const CHIPS={
-  typical:['Bedroom','Bathroom','Kitchen','Living / Dining','Closet','Hallway','Laundry','Entry'],
-  common:['Corridor','Stair','Lobby','Elevator Lobby','Trash Room','Mech / Elec','Mail Room','Amenity','Restroom']
+  units:['Bedroom','Bathroom','Kitchen','Living / Dining','Closet','Hallway','Laundry','Entry'],
+  common:['Corridor','Stair','Lobby','Elevator Lobby','Trash Room','Mech / Elec','Mail Room','Package Room','Restroom','Janitor Closet','Storage'],
+  amenities:['Clubhouse','Leasing Office','Fitness / Gym','Yoga Studio','Business Center','Conference Room','Game Room','Theater','Club Kitchen','Pool Restroom','Locker Room / Showers','Pet Spa','Bike Room','Coffee Bar']
 };
-const MR_HINT=/bath|restroom|laundry|trash/i;
+const MR_HINT=/bath|restroom|laundry|trash|shower|locker|pool|pet spa|janitor/i;
+const CTR={units:'unitTypes',common:'groups'};
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -205,26 +218,63 @@ function evalExpr(s){
 }
 const val=s=>{const v=evalExpr(s);return isFinite(v)?v:0;};
 const isExpr=s=>/[+\-*/x×()]/i.test(String(s||'').replace(/^\s*-/,''));
-// lengths: 12'6"  12-6  12 6  12'  12.5
-function parseLen(s){
-  s=String(s??'').trim();if(!s)return 0;
-  const m=s.match(/^(\d+(?:[.,]\d+)?)\s*(?:'|ft|-|\s)\s*(\d+(?:[.,]\d+)?)?\s*(?:"|''|in)?$/i);
-  if(m)return parseFloat(m[1].replace(',','.'))+(m[2]?parseFloat(m[2].replace(',','.'))/12:0);
-  const n=parseFloat(s.replace(',','.'));return isNaN(n)?0:n;
+
+/* Lengths, including what laser meters type in keyboard mode:
+   12'6"  12' 6 1/2"  12'-6 1/2"  12 6  12-6  12.5  12.5ft  150"  6 1/2"  3.812m  381cm  3812mm
+   iPad smart quotes (’ ” ′ ″) are accepted. Result is in feet. */
+function parseLen(raw){
+  let s=String(raw??'').trim().toLowerCase()
+    .replace(/[’‘′`´]/g,"'").replace(/[”“″]/g,'"').replace(/''/g,'"')
+    .replace(/(\d),(\d)/g,'$1.$2').replace(/\s+/g,' ');
+  if(!s)return 0;
+  const N='(\\d+(?:\\.\\d+)?)',F='(\\d+)\\s*/\\s*(\\d+)';
+  let m;
+  const fr=(a,b)=>a&&b&&+b?(+a)/(+b):0;
+  if((m=s.match(new RegExp('^'+N+'\\s*(mm|cm|m)$'))))return +m[1]*({mm:1/304.8,cm:1/30.48,m:3.280839895})[m[2]];
+  if((m=s.match(new RegExp('^'+N+'\\s*(?:ft|feet)$'))))return +m[1];
+  // inches only: 150"  6 1/2"  1/2"
+  if((m=s.match(new RegExp('^(?:'+N+')?(?:[ -]*'+F+')?\\s*(?:"|in|inch|inches)$')))&&(m[1]||m[2]))return((+m[1]||0)+fr(m[2],m[3]))/12;
+  // feet + inches: 12'6"  12' 6 1/2"  12'-6-1/2  12' 1/2"
+  if((m=s.match(new RegExp('^'+N+"\\s*(?:'|ft)\\s*-?\\s*(?:"+N+')?(?:[ -]*'+F+')?\\s*(?:"|in)?$'))))
+    return +m[1]+((+m[2]||0)+fr(m[3],m[4]))/12;
+  // 12 6   12-6   12 6 1/2
+  if((m=s.match(new RegExp('^(\\d+)[ -]+'+N+'(?:[ -]+'+F+')?$'))))return +m[1]+(+m[2]+fr(m[3],m[4]))/12;
+  const n=parseFloat(s);return isNaN(n)?0:n;
 }
-const lenTxt=n=>{if(!n)return '';const f=Math.floor(n+1e-9);const inch=Math.round((n-f)*12);return inch?`${f}'${inch}"`:`${f}'`;};
+function lenTxt(n){
+  if(!n)return '';
+  let ft=Math.floor(n+1e-9),eighths=Math.round((n-ft)*96);
+  if(eighths>=96){ft++;eighths=0;}
+  const inch=Math.floor(eighths/8);let r=eighths%8,d=8;
+  while(r&&r%2===0){r/=2;d/=2;}
+  const frac=r?` ${r}/${d}`:'';
+  if(!inch&&!r)return `${ft}'`;
+  return `${ft}' ${inch}${frac}"`;
+}
 
 /* ---------- model ---------- */
 function newRoom(name=''){return{id:uid(),name,qty:'1',mode:'sf',walls:'',clg:'',mr:'',L:'',W:'',H:'',mrWalls:MR_HINT.test(name)};}
+const newUnitType=(name='Unit A',count='1')=>({id:uid(),name,count,rooms:[]});
+const newGroup=(name='Level 1')=>({id:uid(),name,rooms:[]});
 function newProject(){
   return{name:'New project',address:'',levels:'',drawings:'',date:new Date().toISOString().slice(0,10),
-    units:'1',assume:{...DEF_ASSUME},typical:[newRoom('')],common:[],mats:DEF_MATS.map(m=>({...m})),updatedAt:Date.now()};
+    assume:{...DEF_ASSUME},unitTypes:[newUnitType()],groups:[newGroup()],mats:DEF_MATS.map(m=>({...m})),updatedAt:Date.now()};
 }
+// Older projects had one typical unit + one common list; carry them into the new shape.
 function normalize(p){
+  let migrated=false;
   p.assume={...DEF_ASSUME,...(p.assume||{})};
-  p.typical=Array.isArray(p.typical)?p.typical:[];p.common=Array.isArray(p.common)?p.common:[];
+  if(!Array.isArray(p.unitTypes)){
+    p.unitTypes=[{id:'ut1',name:'Unit A',count:String(p.units??'1'),rooms:Array.isArray(p.typical)?p.typical:[]}];migrated=true;
+  }
+  if(!Array.isArray(p.groups)){
+    p.groups=[{id:'grp1',name:'Common Areas',rooms:Array.isArray(p.common)?p.common:[]}];migrated=true;
+  }
+  if(migrated){delete p.typical;delete p.common;delete p.units;}
+  p.unitTypes.forEach(u=>{u.rooms=Array.isArray(u.rooms)?u.rooms:[];});
+  p.groups.forEach(g=>{g.rooms=Array.isArray(g.rooms)?g.rooms:[];});
   if(!Array.isArray(p.mats)||!p.mats.length)p.mats=DEF_MATS.map(m=>({...m}));
-  return p;
+  return migrated;
 }
 function roomSF(r,A){
   const q=val(r.qty);
@@ -246,27 +296,31 @@ function secCalc(list,A){
   return t;
 }
 function projCalc(p){
-  const A=p.assume,u=val(p.units);
-  const ts=secCalc(p.typical,A),cs=secCalc(p.common,A);
-  const typ={w:u*ts.w,c:u*ts.c,m:u*ts.m,tot:u*ts.tot};
-  const grand={w:typ.w+cs.w,c:typ.c+cs.c,m:typ.m+cs.m,tot:typ.tot+cs.tot};
-  const sheets={w:u*ts.ws+cs.ws,c:u*ts.cs+cs.cs,m:u*ts.ms+cs.ms};
+  const A=p.assume;
+  const units=p.unitTypes.map(u=>{const n=val(u.count),s=secCalc(u.rooms,A);return{u,n,s,w:n*s.w,c:n*s.c,m:n*s.m,tot:n*s.tot,ws:n*s.ws,cs:n*s.cs,ms:n*s.ms};});
+  const groups=p.groups.map(g=>{const s=secCalc(g.rooms,A);return{g,s,w:s.w,c:s.c,m:s.m,tot:s.tot,ws:s.ws,cs:s.cs,ms:s.ms};});
+  const all=[...units,...groups];
+  const sum=k=>all.reduce((a,x)=>a+x[k],0);
+  const grand={w:sum('w'),c:sum('c'),m:sum('m'),tot:sum('tot')};
+  const sheets={w:sum('ws'),c:sum('cs'),m:sum('ms')};
+  const nUnits=units.reduce((a,x)=>a+x.n,0);
   const k=1+(+A.waste||0);
   const mats=p.mats.map(m=>{
     const basis=m.basis==='clg'?grand.c:m.basis==='wallsmr'?grand.w+grand.m:grand.w+grand.c+grand.m;
     const qty=ru(basis*(+m.rate||0)*k);return{...m,basisVal:basis,qty,packs:ru(qty/(+m.pack||1))};
   });
-  return{u,ts,cs,typ,grand,sheets,mats};
+  return{units,groups,grand,sheets,nUnits,mats};
 }
 
 /* ---------- local storage only; no remote backend ---------- */
-let projects={},currentId=null,tab='typical',saveTimer=null;
+let projects={},currentId=null,tab='units',saveTimer=null;
+let active={units:null,common:null},loaded=true;
 function setStatus(kind,text){const el=$('#status');el.className='status '+kind;el.querySelector('span').textContent=text;}
 let storageFailed=false;
 function lsRead(){
   try{const raw=localStorage.getItem(LS_KEY);const data=JSON.parse(raw||'{}');
     if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Invalid storage');
-    Object.values(data).forEach(normalize);return data;
+    Object.keys(data).forEach(id=>{if(data[id]&&typeof data[id]==='object')normalize(data[id]);else delete data[id];});return data;
   }catch(e){storageFailed=true;return {};}
 }
 function lsWrite(){
@@ -277,8 +331,23 @@ function lsWrite(){
 }
 function initStore(){projects=lsRead();if(storageFailed)setStatus('local','Saved data could not be read. Changes will not be saved.');else setStatus('local','Saved on this device only');render();}
 const clean=p=>JSON.parse(JSON.stringify(p));
-function touch(){const p=projects[currentId];if(!p)return;p.updatedAt=Date.now();if(lsWrite()){setStatus('local','Saved on this device only');return true;}return false;}
+function touch(){const p=projects[currentId];if(!p)return false;p.updatedAt=Date.now();if(lsWrite()){setStatus('local','Saved on this device only');return true;}return false;}
 async function removeProject(id){delete projects[id];if(lsWrite())setStatus('local','Saved on this device only');}
+
+/* ---------- containers (unit types / common-area groups) ---------- */
+function ctrList(p,t){return p[CTR[t]];}
+function activeCtr(p,t){
+  const list=ctrList(p,t);
+  let c=list.find(x=>x.id===active[t]);
+  if(!c&&list.length){c=list[0];active[t]=c.id;}
+  return c||null;
+}
+function locate(id){
+  const p=projects[currentId];
+  for(const c of [...p.unitTypes,...p.groups]){const i=c.rooms.findIndex(r=>r.id===id);if(i>=0)return{list:c.rooms,idx:i,ctr:c};}
+  return null;
+}
+const findRoom=id=>{const l=locate(id);return l?l.list[l.idx]:null;};
 
 /* ---------- rendering ---------- */
 function render(){
@@ -294,23 +363,24 @@ function render(){
   refreshAll();
 }
 function renderTabs(p){
-  const t=[['project','Project',''],['typical','Typical unit',p.typical.length],['common','Common areas',p.common.length],['summary','Summary','']];
+  const nRooms=l=>l.reduce((a,c)=>a+c.rooms.length,0);
+  const t=[['project','Project',''],['units','Unit types',p.unitTypes.length],['common','Common areas',nRooms(p.groups)],['summary','Summary','']];
   $('#tabs').innerHTML=t.map(([k,l,c])=>`<button data-tab="${k}" class="${tab===k?'on':''}">${l}${c!==''?`<span class="count">${c}</span>`:''}</button>`).join('');
 }
 function renderHome(){
   const list=Object.entries(projects).filter(([,p])=>p&&!p._deleted).sort((a,b)=>(b[1].updatedAt||0)-(a[1].updatedAt||0));
   $('#main').innerHTML=`
-  <div class="sec-head"><div><h2>Projects</h2><p>Each project is one takeoff: typical unit, common areas and materials.</p></div><div class="spacer"></div>
+  <div class="sec-head"><div><h2>Projects</h2><p>Each project is one takeoff: unit types, common areas by level or building, and materials.</p></div><div class="spacer"></div>
   <button class="btn primary" data-act="newp">+ New project</button></div>
-  ${list.length?`<div class="plist">${list.map(([id,p])=>{const c=projCalc(normalize(p));return`
+  ${list.length?`<div class="plist">${list.map(([id,p])=>{normalize(p);const c=projCalc(p);const nCommon=p.groups.reduce((a,g)=>a+g.rooms.length,0);return`
     <div class="pcard">
       <h3>${esc(p.name||'Untitled')}</h3>
       <div class="meta">${esc([p.address,p.levels].filter(Boolean).join(' · ')||'No address')}</div>
-      <div class="meta">${val(p.units)} units · ${p.typical.length} typical rooms · ${p.common.length} common areas</div>
+      <div class="meta">${fmt(c.nUnits)} units in ${p.unitTypes.length} type${p.unitTypes.length===1?'':'s'} · ${nCommon} common areas in ${p.groups.length} group${p.groups.length===1?'':'s'}</div>
       <div><span class="big">${fmt0(c.grand.tot)}</span> <span class="meta">sheets</span></div>
       <div class="row"><button class="btn primary sm" data-open="${id}">Open</button><button class="btn sm" data-dupp="${id}">Duplicate</button><button class="btn sm danger" data-delp="${id}">Delete</button></div>
     </div>`;}).join('')}</div>`
-  :`<div class="empty"><p><b>No projects yet.</b></p><p>Tap “New project” to start a takeoff. It saves automatically as you type.</p></div>`}`;
+  :!loaded?`<div class="empty"><p><b>Loading projects…</b></p></div>`:`<div class="empty"><p><b>No projects yet.</b></p><p>Tap “New project” to start a takeoff. It saves automatically as you type.</p></div>`}`;
 }
 function projectHTML(p){
   const A=p.assume;
@@ -318,7 +388,6 @@ function projectHTML(p){
   <div class="panel"><div class="grid g2">
     ${pf('name','Project',p.name)}${pf('address','Address',p.address)}${pf('levels','Levels / Scope',p.levels)}${pf('drawings','Drawings / Scale',p.drawings)}
     <label class="field"><span class="lbl">Date</span><input type="date" id="p-date" data-p="date" value="${esc(p.date)}"></label>
-    <label class="field"><span class="lbl"># of typical units</span><input id="p-units" data-p="units" inputmode="decimal" value="${esc(p.units)}"></label>
   </div></div>
   <div class="panel"><div class="lbl" style="margin-bottom:10px">Assumptions</div><div class="grid g5">
     ${af('wall','Sheet size – Walls (ft²)',A.wall,'s-w')}${af('clg','Sheet size – Ceiling (ft²)',A.clg,'s-c')}${af('mr','Sheet size – MR (ft²)',A.mr,'s-m')}
@@ -329,26 +398,41 @@ function projectHTML(p){
 const pf=(k,l,v)=>`<label class="field"><span class="lbl">${l}</span><input id="p-${k}" data-p="${k}" value="${esc(v)}" enterkeyhint="next"></label>`;
 const af=(k,l,v,c)=>`<label class="field ${c?'surf '+c:''}"><span class="lbl">${l}</span><input id="a-${k}" data-a="${k}" inputmode="decimal" value="${esc(v)}"></label>`;
 
-function sectionHTML(p,sec){
-  const list=p[sec];
-  const title=sec==='typical'?'Typical unit':'Common areas';
-  const sub=sec==='typical'?`Measurements for ONE unit. Multiplied by ${val(p.units)} units.`:'Corridors, stairs, lobby and other areas outside the units.';
-  return`<div class="sec-head"><div><h2>${title}</h2><p>${sub}</p></div>
-    ${sec==='typical'?`<div class="spacer"></div><label class="field" style="width:150px"><span class="lbl"># of units</span><input id="p-units2" data-p="units" inputmode="decimal" value="${esc(p.units)}"></label>`:''}</div>
-  <div class="lbl">Quick add</div>
-  <div class="chips">${CHIPS[sec].map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>
-  <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`}</div>
-  <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
-  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12 6</span> or <span class="num">12.5</span>.</p>`;
+function ctrBarHTML(p,t){
+  const list=ctrList(p,t),cur=activeCtr(p,t);
+  return list.map(c=>`<button class="pill ${cur&&c.id===cur.id?'on':''}" data-ctr="${c.id}">${esc(c.name||'Untitled')}${t==='units'?` <span class="num">×${esc(c.count)}</span>`:` <span class="num">${c.rooms.length}</span>`}</button>`).join('')
+    +`<button class="pill add" data-act="addctr">+ ${t==='units'?'Unit type':'Level / building'}</button>`;
 }
+function sectionHTML(p,t){
+  const cur=activeCtr(p,t);
+  const isU=t==='units';
+  const head=`<div class="sec-head"><div><h2>${isU?'Unit types':'Common areas'}</h2><p>${isU?'Enter the rooms of ONE unit of each type. They are multiplied by that type’s unit count.':'Group corridors, stairs, lobbies and other shared spaces by level or building.'}</p></div></div>
+  <div class="ctr-bar" id="ctrBar">${ctrBarHTML(p,t)}</div>`;
+  if(!cur)return head+`<div class="empty">${isU?'No unit types yet. Tap “+ Unit type” to add Unit A.':'No levels or buildings yet. Tap “+ Level / building” to add one.'}</div>`;
+  const list=cur.rooms;
+  return head+`
+  <div class="panel ctr-edit">
+    <label class="field"><span class="lbl">${isU?'Unit type name':'Level / building name'}</span><input id="c-name" data-c="name" value="${esc(cur.name)}" placeholder="${isU?'Unit A, 1BR, Type B2…':'Level 1, Bldg A – Level 2…'}" enterkeyhint="next"></label>
+    ${isU?`<label class="field"><span class="lbl"># of units of this type</span><input id="c-count" data-c="count" inputmode="decimal" value="${esc(cur.count)}" enterkeyhint="next"></label>`:''}
+    <div class="ctr-acts"><button class="btn sm" data-act="dupctr">Duplicate ${isU?'type':'group'}</button><button class="btn sm danger" data-act="delctr">Delete ${isU?'type':'group'}</button></div>
+    <div class="ctr-tot">Sheets ${isU?'per unit':''} <b class="num" id="ctrPer">0</b>${isU?` · All units <b class="num" id="ctrAll">0</b>`:''}</div>
+  </div>
+  <div class="lbl">Quick add to ${esc(cur.name||'this '+(isU?'type':'group'))}</div>
+  ${chipRow(t==='common'?'Shared spaces':'',CHIPS[t])}${t==='common'?chipRow('Amenities',CHIPS.amenities):''}
+  <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):emptyRooms()}</div>
+  <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
+  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
+}
+const chipRow=(label,list)=>`${label?`<div class="chip-lbl">${label}</div>`:''}<div class="chips">${list.map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>`;
+const emptyRooms=()=>`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`;
 const compactHTML=r=>`<div class="room done" data-id="${r.id}"><button class="room-sum" data-act="edit" aria-label="Edit ${esc(r.name)}"><span class="ok" aria-hidden="true">✓</span><span class="rn">${esc(r.name||'Untitled')}</span><span class="q num">×${esc(r.qty)}</span><span class="calc" data-o="sum"></span><span class="tot">Total sheets <b data-o="tot">0</b></span><span class="ed">Edit</span></button></div>`;
 function roomHTML(r){
   if(r.done)return compactHTML(r);
   const body=r.mode==='dim'?`
     <div class="dims">
-      <label class="field"><span class="lbl">Length</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12'6" value="${esc(r.L)}" enterkeyhint="next"></label>
-      <label class="field"><span class="lbl">Width</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next"></label>
-      <label class="field"><span class="lbl">Height</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="${esc(projects[currentId].assume.h)}' (default)" value="${esc(r.H)}" enterkeyhint="next"></label>
+      <label class="field"><span class="lbl">Length</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12' 6 1/2&quot;" value="${esc(r.L)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Lx"></span></label>
+      <label class="field"><span class="lbl">Width</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Wx"></span></label>
+      <label class="field"><span class="lbl">Height</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="${esc(projects[currentId].assume.h)}' (default)" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span></label>
       <label class="toggle"><input type="checkbox" id="r-${r.id}-mrw" data-f="mrWalls" ${r.mrWalls?'checked':''}>MR walls</label>
     </div>
     <div class="surfaces">
@@ -374,7 +458,7 @@ function roomHTML(r){
 const sfIn=(r,k,l,c,o)=>`<label class="surf ${c}"><span class="lbl">${l}</span><input id="r-${r.id}-${k}" data-f="${k}" inputmode="decimal" value="${esc(r[k])}" enterkeyhint="next"><span class="calc" data-o="${o}"></span></label>`;
 
 function summaryHTML(p){
-  return`<div class="sec-head"><div><h2>Summary</h2><p>Same as your sheet: Project Summary and Materials.</p></div><div class="spacer"></div><button class="btn primary" data-act="export">Export Excel</button></div>
+  return`<div class="sec-head"><div><h2>Summary</h2><p>Same layout as your sheet: one row per unit type and per level or building, then Materials.</p></div><div class="spacer"></div><button class="btn primary" data-act="export">Export Excel</button></div>
   <div class="tbl"><table id="sumT"></table></div>
   <div class="lbl" style="margin:18px 0 8px">Materials (rate and pack size are editable)</div>
   <div class="tbl"><table id="matT"></table></div>`;
@@ -390,6 +474,10 @@ function refreshAll(){
     set('per',fmt0(c.per));set('tot',fmt0(c.tot));
     set('sum',[c.w&&`W ${fmt(c.w)}`,c.c&&`C ${fmt(c.c)}`,c.m&&`MR ${fmt(c.m)}`].filter(Boolean).join(' · ')+(c.w||c.c||c.m?' ft²':''));
     set('w',fmt(c.w));set('c',fmt(c.c));set('m',fmt(c.m));
+    if(r.mode==='dim'){
+      const show=raw=>{const v=parseLen(raw);return String(raw||'').trim()?(v?`= ${lenTxt(v)}`:'Not a length'):'';};
+      set('Lx',show(r.L));set('Wx',show(r.W));set('Hx',String(r.H||'').trim()?show(r.H):`Default ${lenTxt(+A.h)}`);
+    }
     const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} sheets`:'');};
     set('wsx',r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
     set('csx',r.mode==='dim'?(c.c?c.cs+' sheets':''):ex('clg',c.c,c.cs));
@@ -398,16 +486,20 @@ function refreshAll(){
   const t=projCalc(p);
   $('#k-tot').textContent=fmt0(t.grand.tot);$('#k-w').textContent=fmt0(t.sheets.w);$('#k-c').textContent=fmt0(t.sheets.c);$('#k-m').textContent=fmt0(t.sheets.m);
   $('#pname').textContent='· '+(p.name||'Untitled');
+  if(tab==='units'||tab==='common'){
+    const cur=activeCtr(p,tab);
+    if(cur){const s=secCalc(cur.rooms,A);const per=$('#ctrPer');if(per)per.textContent=fmt0(s.tot);const all=$('#ctrAll');if(all)all.textContent=fmt0(s.tot*val(cur.count));}
+  }
   const sT=$('#sumT');
   if(sT){
+    const row=(name,n,x)=>`<tr><td>${esc(name)}</td><td class="num">${n}</td><td class="num">${fmt(x.w)}</td><td class="num">${fmt(x.c)}</td><td class="num">${fmt(x.m)}</td><td class="num">${fmt0(x.tot)}</td></tr>`;
     sT.innerHTML=`<thead><tr><th>Area</th><th># of Units</th><th>ft² Walls</th><th>ft² Ceiling</th><th>ft² MR</th><th>Total Sheets</th></tr></thead><tbody>
-      <tr><td>Typical Units</td><td class="num">${fmt(t.u)}</td><td class="num">${fmt(t.typ.w)}</td><td class="num">${fmt(t.typ.c)}</td><td class="num">${fmt(t.typ.m)}</td><td class="num">${fmt0(t.typ.tot)}</td></tr>
-      <tr><td>Common Areas</td><td>N/A</td><td class="num">${fmt(t.cs.w)}</td><td class="num">${fmt(t.cs.c)}</td><td class="num">${fmt(t.cs.m)}</td><td class="num">${fmt0(t.cs.tot)}</td></tr>
-      <tr class="grand"><td>GRAND TOTAL</td><td class="num">${fmt(t.u)}</td><td class="num">${fmt(t.grand.w)}</td><td class="num">${fmt(t.grand.c)}</td><td class="num">${fmt(t.grand.m)}</td><td class="num">${fmt0(t.grand.tot)}</td></tr></tbody>`;
+      ${t.units.map(x=>row(x.u.name||'Unit type',fmt(x.n),x)).join('')}
+      ${t.groups.map(x=>row('Common Areas – '+(x.g.name||'Group'),'N/A',x)).join('')}
+      <tr class="grand"><td>GRAND TOTAL</td><td class="num">${fmt(t.nUnits)}</td><td class="num">${fmt(t.grand.w)}</td><td class="num">${fmt(t.grand.c)}</td><td class="num">${fmt(t.grand.m)}</td><td class="num">${fmt0(t.grand.tot)}</td></tr></tbody>`;
   }
   const mT=$('#matT');
   if(mT){
-    const active=document.activeElement&&document.activeElement.id;
     if(!mT.dataset.built){
       mT.innerHTML=`<thead><tr><th>Material</th><th>Basis ft²</th><th>Usage Rate</th><th>Rate Unit</th><th>Qty (+ waste)</th><th>Pack Size</th><th>Pack Unit</th><th>Packs to Order</th></tr></thead><tbody>${p.mats.map((m,i)=>`
         <tr><td>${esc(m.name)}</td><td class="num" data-mo="${i}-b"></td><td><input class="num" id="m-${i}-rate" data-m="${i}.rate" inputmode="decimal" value="${esc(m.rate)}"></td><td>${esc(m.rateUnit)}</td>
@@ -421,20 +513,18 @@ function refreshAll(){
     });
   }
 }
-function findRoom(id){const p=projects[currentId];return p.typical.find(r=>r.id===id)||p.common.find(r=>r.id===id);}
-function secOf(id){const p=projects[currentId];return p.typical.some(r=>r.id===id)?'typical':'common';}
 
 /* ---------- events ---------- */
 document.addEventListener('input',e=>{
   const el=e.target,p=projects[currentId];if(!p)return;
-  if(el.dataset.p){p[el.dataset.p]=el.value;if(el.dataset.p==='units'){const o=document.querySelectorAll('[data-p="units"]');o.forEach(x=>{if(x!==el)x.value=el.value;});}}
+  if(el.dataset.p){p[el.dataset.p]=el.value;}
   else if(el.dataset.a){p.assume[el.dataset.a]=el.dataset.a==='waste'?(val(el.value)/100):val(el.value);}
   else if(el.dataset.m){const[i,k]=el.dataset.m.split('.');p.mats[+i][k]=val(el.value);}
+  else if(el.dataset.c){const cur=activeCtr(p,tab);if(!cur)return;cur[el.dataset.c]=el.value;$('#ctrBar').innerHTML=ctrBarHTML(p,tab);}
   else if(el.dataset.f){const room=el.closest('.room');const r=findRoom(room.dataset.id);r[el.dataset.f]=el.type==='checkbox'?el.checked:el.value;}
   else return;
   refreshAll();touch();
 });
-document.addEventListener('change',e=>{if(e.target.type==='checkbox')return;});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Enter'||e.target.tagName!=='INPUT')return;
   e.preventDefault();
@@ -443,27 +533,48 @@ document.addEventListener('keydown',e=>{
   if(i>=0&&i<ins.length-1){ins[i+1].focus();ins[i+1].select&&ins[i+1].select();}
   else e.target.blur();
 });
+function arm(b,label,restore,cls){
+  if(b.dataset.armed)return true;
+  b.dataset.armed='1';const old=b.textContent;b.textContent=label;b.classList.add(cls);
+  setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent=restore??old;b.classList.remove(cls);}},3000);
+  return false;
+}
 document.addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.tab){tab=b.dataset.tab;render();window.scrollTo(0,0);return;}
   if(b.id==='backBtn'){currentId=null;render();return;}
   if(b.id==='exportBtn'||b.dataset.act==='export'){exportXlsx();return;}
-  if(b.dataset.act==='newp'){const id=uid();projects[id]=newProject();currentId=id;tab='project';touch();render();setTimeout(()=>{const n=$('#p-name');n&&(n.focus(),n.select());},50);return;}
-  if(b.dataset.open){currentId=b.dataset.open;normalize(projects[currentId]);tab='typical';render();window.scrollTo(0,0);return;}
-  if(b.dataset.dupp){const id=uid();const c=clean(projects[b.dataset.dupp]);c.name=(c.name||'')+' (copy)';c.updatedAt=Date.now();[...c.typical,...c.common].forEach(r=>r.id=uid());projects[id]=c;currentId=id;touch();currentId=null;render();toast('Project duplicated');return;}
-  if(b.dataset.delp){
-    if(b.dataset.armed){await removeProject(b.dataset.delp);render();toast('Project deleted');}
-    else{b.dataset.armed='1';b.textContent='Sure? Tap again';b.classList.add('primary');setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='Delete';b.classList.remove('primary');}},3000);}
-    return;
-  }
+  if(b.dataset.act==='newp'){const id=uid();projects[id]=newProject();currentId=id;tab='project';active={units:null,common:null};touch();render();setTimeout(()=>{const n=$('#p-name');n&&(n.focus(),n.select());},50);return;}
+  if(b.dataset.open){currentId=b.dataset.open;active={units:null,common:null};if(normalize(projects[currentId]))touch();tab='units';render();window.scrollTo(0,0);return;}
+  if(b.dataset.dupp){const id=uid();const c=clean(projects[b.dataset.dupp]);normalize(c);c.name=(c.name||'')+' (copy)';c.updatedAt=Date.now();[...c.unitTypes,...c.groups].forEach(x=>{x.id=uid();x.rooms.forEach(r=>r.id=uid());});projects[id]=c;currentId=id;touch();currentId=null;render();toast('Project duplicated');return;}
+  if(b.dataset.delp){if(arm(b,'Sure? Tap again','Delete','primary')){await removeProject(b.dataset.delp);render();toast('Project deleted');}return;}
   const p=projects[currentId];if(!p)return;
+  if(b.dataset.ctr){active[tab]=b.dataset.ctr;render();return;}
+  if(b.dataset.act==='addctr'){
+    const list=ctrList(p,tab);
+    const c=tab==='units'?newUnitType('Unit '+String.fromCharCode(65+Math.min(list.length,25)),'1'):newGroup('Level '+(list.length+1));
+    list.push(c);active[tab]=c.id;touch();render();
+    setTimeout(()=>{const n=$('#c-name');n&&(n.focus(),n.select());},50);return;
+  }
+  if(b.dataset.act==='dupctr'){
+    const list=ctrList(p,tab),cur=activeCtr(p,tab);if(!cur)return;
+    const c=clean(cur);c.id=uid();c.name=(c.name||'')+' (copy)';c.rooms.forEach(r=>r.id=uid());
+    list.splice(list.indexOf(cur)+1,0,c);active[tab]=c.id;touch();render();toast('Duplicated — rename it and adjust');
+    setTimeout(()=>{const n=$('#c-name');n&&(n.focus(),n.select());},50);return;
+  }
+  if(b.dataset.act==='delctr'){
+    if(!arm(b,'Sure? Tap again',null,'primary'))return;
+    const list=ctrList(p,tab),cur=activeCtr(p,tab);if(!cur)return;
+    list.splice(list.indexOf(cur),1);active[tab]=null;touch();render();toast(`${cur.name||'Group'} deleted`);return;
+  }
   if(b.dataset.chip||b.dataset.act==='add'){addRoom(p,b.dataset.chip||'');return;}
   const room=b.closest('.room');if(!room)return;
-  const id=room.dataset.id,sec=secOf(id),list=p[sec],idx=list.findIndex(r=>r.id===id);
+  const id=room.dataset.id,loc=locate(id);if(!loc)return;
+  const list=loc.list,idx=loc.idx;
   if(b.dataset.act==='done'||b.dataset.act==='donenext'){
     const r=list[idx];
     if(!String(r.name||'').trim()){const n=document.getElementById(`r-${r.id}-name`);n&&n.focus();toast('Name the room before saving it');return;}
-    r.done=true;if(!touch()){r.done=false;toast('Could not save the room. Export Excel before closing.');return;}
+    r.done=true;if(!touch()){r.done=false;toast('Could not save. Export Excel before closing.');return;}
     room.outerHTML=roomHTML(r);refreshAll();
     toast(`${r.name} saved ✓`);
     if(b.dataset.act==='donenext')addRoom(p,'');
@@ -474,14 +585,15 @@ document.addEventListener('click',async e=>{
     const n=document.getElementById(`r-${id}-qty`);n&&n.focus();return;
   }
   if(b.dataset.mode){list[idx].mode=b.dataset.mode;touch();room.outerHTML=roomHTML(list[idx]);refreshAll();return;}
-  if(b.dataset.act==='dup'){const c={...clean(list[idx]),id:uid()};list.splice(idx+1,0,c);touch();renderTabs(p);room.insertAdjacentHTML('afterend',roomHTML(c));refreshAll();toast('Room duplicated');return;}
+  if(b.dataset.act==='dup'){const c={...clean(list[idx]),id:uid(),done:false};list.splice(idx+1,0,c);touch();renderTabs(p);$('#ctrBar')&&($('#ctrBar').innerHTML=ctrBarHTML(p,tab));room.insertAdjacentHTML('afterend',roomHTML(c));refreshAll();toast('Room duplicated');return;}
   if(b.dataset.act==='del'){
-    if(b.dataset.armed){list.splice(idx,1);touch();renderTabs(p);room.remove();if(!list.length)$('#rooms').innerHTML='<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>';refreshAll();}
-    else{b.dataset.armed='1';b.textContent='Delete';b.classList.add('confirm');setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='✕';b.classList.remove('confirm');}},3000);}
+    if(arm(b,'Delete','✕','confirm')){list.splice(idx,1);touch();renderTabs(p);$('#ctrBar')&&($('#ctrBar').innerHTML=ctrBarHTML(p,tab));room.remove();if(!list.length)$('#rooms').innerHTML=emptyRooms();refreshAll();}
   }
 });
 function addRoom(p,name){
-  const r=newRoom(name);p[tab].push(r);touch();renderTabs(p);
+  const cur=activeCtr(p,tab);if(!cur)return;
+  const r=newRoom(name);cur.rooms.push(r);touch();renderTabs(p);
+  const bar=$('#ctrBar');if(bar)bar.innerHTML=ctrBarHTML(p,tab);
   const wrap=$('#rooms');if(!wrap)return;
   if(wrap.querySelector('.empty'))wrap.innerHTML='';
   wrap.insertAdjacentHTML('beforeend',roomHTML(r));refreshAll();
@@ -490,13 +602,13 @@ function addRoom(p,name){
 }
 let toastT;function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600);}
 
-/* ---------- Excel export (same layout as the Template sheet, live formulas) ---------- */
+/* ---------- Excel export (Template layout, one block per unit type and per level/building, live formulas) ---------- */
 async function exportXlsx(){
   const p=projects[currentId];if(!p)return;
-  if(!window.ExcelJS){toast('The Excel generator did not load. Reload the app.');return;}
+  if(!window.ExcelJS){toast('The Excel generator did not load. Check your connection.');return;}
   const A=p.assume,t=projCalc(p);
   const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Takeoff',{views:[{showGridLines:false}]});
-  ws.columns=[{width:3},{width:34},{width:12},{width:13},{width:13},{width:13},{width:13},{width:13},{width:26},{width:14},{width:14},{width:22}];
+  ws.columns=[{width:3},{width:34},{width:12},{width:13},{width:13},{width:13},{width:13},{width:13},{width:26},{width:14},{width:14},{width:26}];
   const thin={style:'thin',color:{argb:'FFBFC6CE'}};const box={top:thin,left:thin,bottom:thin,right:thin};
   const hdrFill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1F2A36'}};
   const subFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE7EBF0'}};
@@ -512,26 +624,44 @@ async function exportXlsx(){
   [['Sheet Size – Walls (ft²)',+A.wall],['Sheet Size – Ceiling (ft²)',+A.clg],['Sheet Size – MR (ft²)',+A.mr],['Waste Factor',+A.waste],['Ceiling Height (ft)',+A.h]].forEach(([l,v],i)=>{C('I'+(5+i),l);const c=C('K'+(5+i),v);c.fill=inFill;c.border=box;if(i===3)c.numFmt='0%';});
   C('I10','Sheets = ROUNDUP(ft² ÷ Sheet Size × (1 + Waste))').font={italic:true,color:{argb:'FF5A6775'}};
 
-  // layout rows
-  const tList=p.typical.length?p.typical:[newRoom('')],cList=p.common.length?p.common:[newRoom('')];
-  const tStart=19,tEnd=tStart+tList.length-1,tSub=tEnd+1;
-  const cTitle=tSub+2,cHdr=cTitle+1,cStart=cHdr+1,cEnd=cStart+cList.length-1,cSub=cEnd+1;
-  const mTitle=cSub+2,mHdr=mTitle+1,mStart=mHdr+1;
+  // Row plan
+  const blocks=[
+    ...p.unitTypes.map(u=>({kind:'unit',name:u.name||'Unit type',count:val(u.count),rooms:u.rooms.length?u.rooms:[newRoom('')]})),
+    ...p.groups.map(g=>({kind:'group',name:g.name||'Group',rooms:g.rooms.length?g.rooms:[newRoom('')]}))
+  ];
+  const sumStart=13,grand=sumStart+blocks.length;
+  let r0=grand+2;
+  blocks.forEach(b=>{b.title=r0;b.hdr=r0+1;b.start=r0+2;b.end=b.start+b.rooms.length-1;b.sub=b.end+1;r0=b.sub+2;});
+  const mTitle=r0,mHdr=mTitle+1,mStart=mHdr+1;
 
   title(11,'Project Summary');
   header(12,['Area','# of Units','ft² Walls','ft² Ceiling','ft² MR','Total Sheets','Sheet Size']);
   const sz=`"Walls "&$K$5&" / Clg "&$K$6&" / MR "&$K$7&" ft²"`,szR=`Walls ${A.wall} / Clg ${A.clg} / MR ${A.mr} ft²`;
-  C('B13','Typical Units');C('C13',t.u).fill=inFill;
-  F('D13',`$C13*D${tSub}`,t.typ.w);F('E13',`$C13*F${tSub}`,t.typ.c);F('F13',`$C13*H${tSub}`,t.typ.m);F('G13',`$C13*K${tSub}`,t.typ.tot);F('H13',sz,szR);
-  C('B14','Common Areas');C('C14','N/A');F('D14',`D${cSub}`,t.cs.w);F('E14',`F${cSub}`,t.cs.c);F('F14',`H${cSub}`,t.cs.m);F('G14',`K${cSub}`,t.cs.tot);F('H14','H13',szR);
-  C('B15','GRAND TOTAL');F('C15','C13',t.u);F('D15','SUM(D13:D14)',t.grand.w);F('E15','SUM(E13:E14)',t.grand.c);F('F15','SUM(F13:F14)',t.grand.m);F('G15','SUM(G13:G14)',t.grand.tot);
-  for(let r=13;r<=15;r++)for(let c=2;c<=8;c++){const cell=ws.getCell(r,c);cell.border=box;if(c>=4&&c<=6)cell.numFmt='#,##0.0';if(c===7)cell.numFmt='#,##0';}
-  for(let c=2;c<=8;c++){ws.getCell(15,c).font={bold:true};ws.getCell(15,c).fill=subFill;}
+  blocks.forEach((b,i)=>{
+    const row=sumStart+i,s=secCalc(b.rooms,A);
+    if(b.kind==='unit'){
+      C('B'+row,b.name);const c=C('C'+row,b.count);c.fill=inFill;
+      F('D'+row,`$C${row}*D${b.sub}`,b.count*s.w);F('E'+row,`$C${row}*F${b.sub}`,b.count*s.c);F('F'+row,`$C${row}*H${b.sub}`,b.count*s.m);F('G'+row,`$C${row}*K${b.sub}`,b.count*s.tot);
+    }else{
+      C('B'+row,'Common Areas – '+b.name);C('C'+row,'N/A');
+      F('D'+row,`D${b.sub}`,s.w);F('E'+row,`F${b.sub}`,s.c);F('F'+row,`H${b.sub}`,s.m);F('G'+row,`K${b.sub}`,s.tot);
+    }
+    F('H'+row,sz,szR);
+  });
+  const last=grand-1;
+  C('B'+grand,'GRAND TOTAL');
+  if(blocks.length){
+    F('C'+grand,`SUM(C${sumStart}:C${last})`,t.nUnits);F('D'+grand,`SUM(D${sumStart}:D${last})`,t.grand.w);F('E'+grand,`SUM(E${sumStart}:E${last})`,t.grand.c);F('F'+grand,`SUM(F${sumStart}:F${last})`,t.grand.m);F('G'+grand,`SUM(G${sumStart}:G${last})`,t.grand.tot);
+  }
+  for(let r=sumStart;r<=grand;r++)for(let c=2;c<=8;c++){const cell=ws.getCell(r,c);cell.border=box;if(c>=4&&c<=6)cell.numFmt='#,##0.0';if(c===7)cell.numFmt='#,##0';}
+  for(let c=2;c<=8;c++){ws.getCell(grand,c).font={bold:true};ws.getCell(grand,c).fill=subFill;}
 
   const roomHdr=['Room','Qty','ft² Walls','Walls (sheets)','ft² Ceiling','Ceiling (sheets)','ft² MR','MR (sheets)','Sheets / Room','Total Sheets','Measurements'];
-  function writeRooms(list,start,end,sub){
-    list.forEach((r,i)=>{
-      const row=start+i,c=roomCalc(r,A);
+  blocks.forEach(b=>{
+    title(b.title,b.kind==='unit'?`${b.name} — measurements per ONE unit (× ${fmt(b.count)} units)`:`Common Areas — ${b.name}`);
+    header(b.hdr,roomHdr);
+    b.rooms.forEach((r,i)=>{
+      const row=b.start+i,c=roomCalc(r,A);
       C('B'+row,r.name||null);C('C'+row,c.q);
       C('D'+row,c.w||null);F('E'+row,`ROUNDUP(D${row}/$K$5*(1+$K$8),0)`,c.ws);
       C('F'+row,c.c||null);F('G'+row,`ROUNDUP(F${row}/$K$6*(1+$K$8),0)`,c.cs);
@@ -542,21 +672,18 @@ async function exportXlsx(){
       for(let cc=2;cc<=12;cc++){const cell=ws.getCell(row,cc);cell.border=box;if([3,4,6,8].includes(cc))cell.fill=inFill;if([4,6,8].includes(cc))cell.numFmt='#,##0.0';}
       ws.getCell('L'+row).font={color:{argb:'FF5A6775'},size:9};
     });
-    const s=secCalc(list,A);
-    C('B'+sub,'SUB-TOTAL');F('C'+sub,`SUM(C${start}:C${end})`,s.q);
-    [['D',s.w],['E',s.ws],['F',s.c],['G',s.cs],['H',s.m],['I',s.ms],['J',s.per]].forEach(([L,v])=>F(L+sub,`SUMPRODUCT($C${start}:$C${end},${L}${start}:${L}${end})`,v));
-    F('K'+sub,`SUM(K${start}:K${end})`,s.tot);
+    const s=secCalc(b.rooms,A),st=b.start,en=b.end,sub=b.sub;
+    C('B'+sub,'SUB-TOTAL');F('C'+sub,`SUM(C${st}:C${en})`,s.q);
+    [['D',s.w],['E',s.ws],['F',s.c],['G',s.cs],['H',s.m],['I',s.ms],['J',s.per]].forEach(([L,v])=>F(L+sub,`SUMPRODUCT($C${st}:$C${en},${L}${st}:${L}${en})`,v));
+    F('K'+sub,`SUM(K${st}:K${en})`,s.tot);
     for(let cc=2;cc<=11;cc++){const cell=ws.getCell(sub,cc);cell.font={bold:true};cell.fill=subFill;cell.border=box;if([4,6,8].includes(cc))cell.numFmt='#,##0.0';}
-  }
-  title(17,'Typical Unit — measurements per ONE unit (enter Qty of each room inside the unit)');
-  header(18,roomHdr);writeRooms(tList,tStart,tEnd,tSub);
-  title(cTitle,'Common Areas');header(cHdr,roomHdr);writeRooms(cList,cStart,cEnd,cSub);
+  });
 
   title(mTitle,'Materials');
   header(mHdr,['Material','Basis ft²','Usage Rate','Rate Unit','Qty (+ waste)','Qty Unit','Pack Size','Pack Unit','Packs to Order']);
   t.mats.forEach((m,i)=>{
     const row=mStart+i;
-    const bf=m.basis==='clg'?'E15':m.basis==='wallsmr'?'D15+F15':'SUM(D15:F15)';
+    const bf=m.basis==='clg'?`E${grand}`:m.basis==='wallsmr'?`D${grand}+F${grand}`:`SUM(D${grand}:F${grand})`;
     C('B'+row,m.name);F('C'+row,bf,m.basisVal);C('D'+row,+m.rate).fill=inFill;C('E'+row,m.rateUnit);
     F('F'+row,`ROUNDUP(C${row}*D${row}*(1+$K$8),0)`,m.qty);C('G'+row,m.qtyUnit);C('H'+row,+m.pack).fill=inFill;C('I'+row,m.packUnit);
     F('J'+row,`ROUNDUP(F${row}/H${row},0)`,m.packs).font={bold:true};
@@ -576,9 +703,9 @@ async function exportXlsx(){
     setTimeout(()=>URL.revokeObjectURL(url),60000);
     toast('Excel generated. Check Downloads in Safari.');
   }catch(err){console.error('Excel export failed',err);toast('Could not generate Excel. Try again.');}
-
 }
 
+window.__takeoffTest={parseLen,lenTxt};
 render();initStore();
 if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1')){
   navigator.serviceWorker.register('./sw.js').catch(err=>{console.error(err);toast('Offline mode could not start. Reload while online.');});

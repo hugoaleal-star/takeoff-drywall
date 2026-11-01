@@ -1,15 +1,11 @@
-# Comprobaciones de la actualización
+# Comprobaciones de la actualización v3
 
-Fuente: Takeoff Drywall3.html proporcionado por el usuario.
+Cambios: varios tipos de unidad (Unit A, B…) con su cantidad, áreas comunes agrupadas por nivel o edificio, botones rápidos de amenidades (Clubhouse, Fitness / Gym, Leasing Office…), y lectura de medidas de medidor láser (metros, cm, mm, pies y pulgadas con fracciones, comillas tipográficas del iPad).
 
-- 100 casos de cálculo comparados contra esta fuente: resultados idénticos para áreas, hojas, cantidades, desperdicio y materiales.
-- Save room probado: compacta el cuarto y persiste done en el guardado local.
-- Edit probado: reabre el cuarto para editarlo.
-- Save & add another probado: guarda el cuarto y añade otro sin alterar los totales existentes.
-- Corregida la llamada a flush del nuevo flujo: se usa el guardado local inmediato; si falla, no muestra una confirmación falsa de cuarto guardado.
-- Excel generado y reabierto: valores, MIME, fórmulas y activación del enlace de descarga verificados.
-- Almacenamiento probado: escritura, relectura y aviso por falta de espacio.
-- Sintaxis JavaScript, manifest, rutas de iconos y ausencia de dependencias de Claude y recursos externos comprobadas.
-- Service worker v2 probado con caché simulada: precarga, activación, respuesta offline y fallback de navegación. Conserva cachés ajenas.
+- Proyecto guardado con el formato anterior (unidad típica + áreas comunes) cargado desde `localStorage`: se convierte a Unit A + grupo "Common Areas" con los mismos totales (590 hojas en el ejemplo).
+- Agregar tipo de unidad, cambiar su cantidad, agregar nivel y cuartos desde los botones rápidos: probado en Chromium sin errores de JavaScript.
+- Excel exportado y reabierto: una fila por tipo de unidad y por nivel/edificio en Project Summary, un bloque de cuartos con subtotal para cada uno, Materials apuntando al GRAND TOTAL; fórmulas activas.
+- Formatos de longitud probados: `12'6"`, `12' 6 1/2"`, `12’ 6 1/2”`, `12'-6-1/2`, `12 6`, `12-6`, `12.5`, `12.5ft`, `150"`, `6 1/2"`, `3.812m`, `381 cm`, `3812mm`, `3,812 m`.
+- Caché del service worker: `takeoff-drywall-v3`. Se mantiene la clave local `takeoff_drywall_v1`; no hay sincronización remota.
 
-Las pruebas de flujos usan un DOM simulado y las pruebas de caché usan almacenamiento simulado. Esta actualización no se ha comprobado visualmente en Safari ni en un iPad físico, ni se ha publicado desde esta conversación. Después de publicar, comprueba los nuevos botones, proyectos anteriores, descarga Excel, orientación y modo avión. No hay backend ni sincronización remota.
+Pendiente: comprobación visual en un iPad físico (instalada desde el icono, modo avión y descarga del Excel).

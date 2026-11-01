@@ -12,7 +12,7 @@ Abrir el HTML como archivo adjunto o desde Archivos no instala el service worker
 
 ## Uso y datos
 
-- Se conservan las pantallas, fórmulas, redondeos por cuarto, cantidades, unidades típicas, áreas comunes y tasas de materiales del original. Las tipografías usan alternativas locales del sistema para evitar dependencias de conexión.
+- Pantallas: Project, Unit types (Unit A, B… cada uno con su cantidad), Common areas (agrupadas por nivel o edificio, con botones de amenidades) y Summary. Se conservan las fórmulas, redondeos por cuarto y tasas de materiales del original. Los proyectos guardados con el formato anterior se convierten solos al abrir la app. Las tipografías usan alternativas locales del sistema para evitar dependencias de conexión.
 - Los proyectos se guardan inmediatamente en `localStorage`, con la clave original `takeoff_drywall_v1`, en ese navegador y dirección web. Se muestra un error si el navegador impide guardar.
 - **No existe sincronización remota ni backend.** Los datos no se comparten entre dispositivos, dominios o perfiles. No se garantiza que Safari y la app instalada compartan almacenamiento: compruébalo antes de trabajar. Cambiar la dirección de publicación no migra proyectos.
 - Borrar datos del sitio, usar navegación privada, desinstalar o la limpieza de almacenamiento del sistema puede eliminar proyectos. Exporta copias con frecuencia. El Excel es un informe editable con fórmulas; esta versión no lo vuelve a importar como proyecto.
