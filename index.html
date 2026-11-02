@@ -80,7 +80,7 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .icon-btn{width:46px;height:46px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);display:grid;place-items:center;font-size:18px}
 .icon-btn.confirm{background:var(--danger);color:#fff;border-color:var(--danger);width:auto;padding:0 12px;font-size:14px;font-weight:600}
 .surfaces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.dims{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:start}
+.dims{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:8px;align-items:start}
 .dims .toggle{margin-top:24px}
 .surf{display:flex;flex-direction:column;gap:5px;min-width:0;border-left:4px solid var(--c);padding-left:8px}
 .surf .lbl{color:var(--c)}
@@ -104,6 +104,9 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .ctr-tot{grid-column:1/-1;font-size:14px;color:var(--muted)}
 .ctr-tot b{color:var(--accent);font-size:18px}
 @media (max-width:640px){.ctr-edit{grid-template-columns:minmax(0,1fr)}}
+.room-height{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface2)}
+.room-height .calc{font-size:13px;color:var(--muted)}
+@media(max-width:640px){.room-height{grid-template-columns:1fr}}
 .hq{display:flex;gap:6px;flex-wrap:wrap}
 .hq-b{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);font-family:var(--f-num);font-size:14px;font-weight:600}
 .hq-b.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
@@ -277,13 +280,6 @@ function normalize(p){
   if(migrated){delete p.typical;delete p.common;delete p.units;}
   p.unitTypes.forEach(u=>{u.rooms=Array.isArray(u.rooms)?u.rooms:[];});
   p.groups.forEach(g=>{g.rooms=Array.isArray(g.rooms)?g.rooms:[];});
-  // Preserve saved type/level heights as individual room heights.
-  [...p.unitTypes,...p.groups].forEach(c=>{
-    if(Object.prototype.hasOwnProperty.call(c,'h')){
-      if(parseLen(c.h))c.rooms.forEach(r=>{if(!parseLen(r.H))r.H=String(c.h);});
-      delete c.h;migrated=true;
-    }
-  });
   if(!Array.isArray(p.mats)||!p.mats.length)p.mats=DEF_MATS.map(m=>({...m}));
   return migrated;
 }
@@ -404,7 +400,7 @@ function projectHTML(p){
     ${af('wall','Sheet size – Walls (ft²)',A.wall,'s-w')}${af('clg','Sheet size – Ceiling (ft²)',A.clg,'s-c')}${af('mr','Sheet size – MR (ft²)',A.mr,'s-m')}
     <label class="field"><span class="lbl">Waste %</span><input id="a-waste" data-a="waste" inputmode="decimal" value="${esc(Math.round((+A.waste||0)*1000)/10)}"></label>
     ${af('h','Default ceiling height (ft)',A.h,'')}
-  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12. Set each room’s height next to Length and Width in Dimensions. If left blank, the project default applies.</p></div>`;
+  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12. Room height is editable in every room card in both ft² and Dimensions. Blank room heights use the unit / level default, then the project default. Height calculates wall area in Dimensions; ft² entries remain measured areas.</p></div>`;
 }
 const pf=(k,l,v)=>`<label class="field"><span class="lbl">${l}</span><input id="p-${k}" data-p="${k}" value="${esc(v)}" enterkeyhint="next"></label>`;
 const af=(k,l,v,c)=>`<label class="field ${c?'surf '+c:''}"><span class="lbl">${l}</span><input id="a-${k}" data-a="${k}" inputmode="decimal" value="${esc(v)}"></label>`;
@@ -424,6 +420,7 @@ function sectionHTML(p,t){
   return head+`
   <div class="panel ctr-edit">
     <label class="field"><span class="lbl">${isU?'Unit type name':'Level / building name'}</span><input id="c-name" data-c="name" value="${esc(cur.name)}" placeholder="${isU?'Unit A, 1BR, Type B2…':'Level 1, Bldg A – Level 2…'}" enterkeyhint="next"></label>
+    <label class="field"><span class="lbl">Default room height (ft)</span><input id="c-h" data-c="h" inputmode="decimal" placeholder="Project: ${esc(lenTxt(+p.assume.h))}" value="${esc(cur.h||'')}" autocomplete="off"></label>
     ${isU?`<label class="field"><span class="lbl"># of units of this type</span><input id="c-count" data-c="count" inputmode="decimal" value="${esc(cur.count)}" enterkeyhint="next"></label>`:''}
     <div class="ctr-acts"><button class="btn sm" data-act="dupctr">Duplicate ${isU?'type':'group'}</button><button class="btn sm danger" data-act="delctr">Delete ${isU?'type':'group'}</button></div>
     <div class="ctr-tot">Sheets ${isU?'per unit':''} <b class="num" id="ctrPer">0</b>${isU?` · All units <b class="num" id="ctrAll">0</b>`:''}</div>
@@ -432,18 +429,17 @@ function sectionHTML(p,t){
   ${chipRow(t==='common'?'Shared spaces':'',CHIPS[t])}${t==='common'?chipRow('Amenities',CHIPS.amenities):''}
   <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):emptyRooms()}</div>
   <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
-  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Tap Dimensions in each room to enter its Length, Width and Height. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
+  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Room height is always visible above Walls, Ceiling and MR. Use Dimensions to calculate wall area from Length, Width and Height; ft² entries are already measured areas. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
 }
 const chipRow=(label,list)=>`${label?`<div class="chip-lbl">${label}</div>`:''}<div class="chips">${list.map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>`;
 const emptyRooms=()=>`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`;
-const compactHTML=r=>`<div class="room done" data-id="${r.id}"><button class="room-sum" data-act="edit" aria-label="Edit ${esc(r.name)}"><span class="ok" aria-hidden="true">✓</span><span class="rn">${esc(r.name||'Untitled')}</span><span class="q num">×${esc(r.qty)}</span><span class="calc" data-o="sum"></span><span class="tot">Total sheets <b data-o="tot">0</b></span><span class="ed">Edit</span></button></div>`;
+const compactHTML=r=>`<div class="room done" data-id="${r.id}"><button class="room-sum" data-act="edit" aria-label="Edit ${esc(r.name)}"><span class="ok" aria-hidden="true">✓</span><span class="rn">${esc(r.name||'Untitled')}</span><span class="q num">×${esc(r.qty)}</span><span class="calc" data-o="sum"></span><span class="calc" data-o="h-summary"></span><span class="tot">Total sheets <b data-o="tot">0</b></span><span class="ed">Edit</span></button></div>`;
 function roomHTML(r){
   if(r.done)return compactHTML(r);
   const body=r.mode==='dim'?`
     <div class="dims">
       <label class="field"><span class="lbl">Length</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12' 6 1/2&quot;" value="${esc(r.L)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Lx"></span></label>
       <label class="field"><span class="lbl">Width</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Wx"></span></label>
-      <label class="field"><span class="lbl">Height (ft)</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Project: ${esc(lenTxt(+projects[currentId].assume.h))}" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span><span class="hq" role="group" aria-label="Quick height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</span></label>
       <label class="toggle"><input type="checkbox" id="r-${r.id}-mrw" data-f="mrWalls" ${r.mrWalls?'checked':''}>MR walls</label>
     </div>
     <div class="surfaces">
@@ -460,6 +456,10 @@ function roomHTML(r){
       <label class="field"><span class="lbl">Qty</span><input id="r-${r.id}-qty" data-f="qty" inputmode="decimal" value="${esc(r.qty)}" enterkeyhint="next"></label>
       <div class="seg" role="group" aria-label="Entry mode"><button data-mode="sf" class="${r.mode!=='dim'?'on':''}">ft²</button><button data-mode="dim" class="${r.mode==='dim'?'on':''}">Dimensions</button></div>
       <div class="racts"><button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button><button class="icon-btn" data-act="del" title="Delete" aria-label="Delete">✕</button></div>
+    </div>
+    <div class="room-height">
+      <label class="field"><span class="lbl">Room height (ft)</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Default height" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span></label>
+      <div><div class="hq" role="group" aria-label="Quick room height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</div><p class="note">Changes only this room. Clear to use the unit / level default.</p></div>
     </div>
     ${body}
     <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
@@ -486,11 +486,13 @@ function refreshAll(){
     set('per',fmt0(c.per));set('tot',fmt0(c.tot));
     set('sum',[c.w&&`W ${fmt(c.w)}`,c.c&&`C ${fmt(c.c)}`,c.m&&`MR ${fmt(c.m)}`].filter(Boolean).join(' · ')+(c.w||c.c||c.m?' ft²':''));
     set('w',fmt(c.w));set('c',fmt(c.c));set('m',fmt(c.m));
-    if(r.mode==='dim'){
-      const show=raw=>{const v=parseLen(raw);return String(raw||'').trim()?(v?`= ${lenTxt(v)}`:'Not a length'):'';};
-      set('Lx',show(r.L));set('Wx',show(r.W));el.querySelectorAll('[data-hq]').forEach(x=>x.classList.toggle('on',String(r.H||'').trim()!==''&&parseLen(r.H)===+x.dataset.hq));
-      set('Hx',String(r.H||'').trim()?show(r.H)+' (this room only)':`Using ${lenTxt(hdv||+A.h)} from ${hdv?esc(loc.ctr.name||'this group'):'project'}`);
-    }
+    const show=raw=>{const v=parseLen(raw);return String(raw||'').trim()?(v?`= ${lenTxt(v)}`:'Not a length'):'';};
+    const effectiveHeight=parseLen(r.H)||hdv||+A.h||0;
+    const hInput=el.querySelector('[data-f="H"]');if(hInput)hInput.placeholder=lenTxt(hdv||+A.h);
+    el.querySelectorAll('[data-hq]').forEach(x=>x.classList.toggle('on',effectiveHeight===+x.dataset.hq));
+    set('Hx',String(r.H||'').trim()?show(r.H)+' (this room only)':`Using ${lenTxt(effectiveHeight)} from ${hdv?loc.ctr.name||'unit / level':'project'}`);
+    set('h-summary',`Height ${lenTxt(effectiveHeight)}`);
+    if(r.mode==='dim'){set('Lx',show(r.L));set('Wx',show(r.W));}
     const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} sheets`:'');};
     set('wsx',r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
     set('csx',r.mode==='dim'?(c.c?c.cs+' sheets':''):ex('clg',c.c,c.cs));
