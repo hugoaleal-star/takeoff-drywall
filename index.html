@@ -277,6 +277,13 @@ function normalize(p){
   if(migrated){delete p.typical;delete p.common;delete p.units;}
   p.unitTypes.forEach(u=>{u.rooms=Array.isArray(u.rooms)?u.rooms:[];});
   p.groups.forEach(g=>{g.rooms=Array.isArray(g.rooms)?g.rooms:[];});
+  // Preserve saved type/level heights as individual room heights.
+  [...p.unitTypes,...p.groups].forEach(c=>{
+    if(Object.prototype.hasOwnProperty.call(c,'h')){
+      if(parseLen(c.h))c.rooms.forEach(r=>{if(!parseLen(r.H))r.H=String(c.h);});
+      delete c.h;migrated=true;
+    }
+  });
   if(!Array.isArray(p.mats)||!p.mats.length)p.mats=DEF_MATS.map(m=>({...m}));
   return migrated;
 }
@@ -397,7 +404,7 @@ function projectHTML(p){
     ${af('wall','Sheet size – Walls (ft²)',A.wall,'s-w')}${af('clg','Sheet size – Ceiling (ft²)',A.clg,'s-c')}${af('mr','Sheet size – MR (ft²)',A.mr,'s-m')}
     <label class="field"><span class="lbl">Waste %</span><input id="a-waste" data-a="waste" inputmode="decimal" value="${esc(Math.round((+A.waste||0)*1000)/10)}"></label>
     ${af('h','Default ceiling height (ft)',A.h,'')}
-  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12. The default ceiling height applies to every room measured by Dimensions; a unit type or level can set its own height, and a single room can override both.</p></div>`;
+  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12. Set each room’s height next to Length and Width in Dimensions. If left blank, the project default applies.</p></div>`;
 }
 const pf=(k,l,v)=>`<label class="field"><span class="lbl">${l}</span><input id="p-${k}" data-p="${k}" value="${esc(v)}" enterkeyhint="next"></label>`;
 const af=(k,l,v,c)=>`<label class="field ${c?'surf '+c:''}"><span class="lbl">${l}</span><input id="a-${k}" data-a="${k}" inputmode="decimal" value="${esc(v)}"></label>`;
@@ -417,7 +424,6 @@ function sectionHTML(p,t){
   return head+`
   <div class="panel ctr-edit">
     <label class="field"><span class="lbl">${isU?'Unit type name':'Level / building name'}</span><input id="c-name" data-c="name" value="${esc(cur.name)}" placeholder="${isU?'Unit A, 1BR, Type B2…':'Level 1, Bldg A – Level 2…'}" enterkeyhint="next"></label>
-    <label class="field"><span class="lbl">Ceiling height (ft)</span><input id="c-h" data-c="h" inputmode="decimal" placeholder="Project: ${esc(lenTxt(+p.assume.h))}" value="${esc(cur.h||'')}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"></label>
     ${isU?`<label class="field"><span class="lbl"># of units of this type</span><input id="c-count" data-c="count" inputmode="decimal" value="${esc(cur.count)}" enterkeyhint="next"></label>`:''}
     <div class="ctr-acts"><button class="btn sm" data-act="dupctr">Duplicate ${isU?'type':'group'}</button><button class="btn sm danger" data-act="delctr">Delete ${isU?'type':'group'}</button></div>
     <div class="ctr-tot">Sheets ${isU?'per unit':''} <b class="num" id="ctrPer">0</b>${isU?` · All units <b class="num" id="ctrAll">0</b>`:''}</div>
@@ -426,7 +432,7 @@ function sectionHTML(p,t){
   ${chipRow(t==='common'?'Shared spaces':'',CHIPS[t])}${t==='common'?chipRow('Amenities',CHIPS.amenities):''}
   <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):emptyRooms()}</div>
   <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
-  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
+  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Tap Dimensions in each room to enter its Length, Width and Height. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
 }
 const chipRow=(label,list)=>`${label?`<div class="chip-lbl">${label}</div>`:''}<div class="chips">${list.map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>`;
 const emptyRooms=()=>`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`;
@@ -437,7 +443,7 @@ function roomHTML(r){
     <div class="dims">
       <label class="field"><span class="lbl">Length</span><input id="r-${r.id}-L" data-f="L" inputmode="decimal" placeholder="12' 6 1/2&quot;" value="${esc(r.L)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Lx"></span></label>
       <label class="field"><span class="lbl">Width</span><input id="r-${r.id}-W" data-f="W" inputmode="decimal" placeholder="10'" value="${esc(r.W)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Wx"></span></label>
-      <label class="field"><span class="lbl">Height</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Default" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span><span class="hq" role="group" aria-label="Quick height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</span></label>
+      <label class="field"><span class="lbl">Height (ft)</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Project: ${esc(lenTxt(+projects[currentId].assume.h))}" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span><span class="hq" role="group" aria-label="Quick height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</span></label>
       <label class="toggle"><input type="checkbox" id="r-${r.id}-mrw" data-f="mrWalls" ${r.mrWalls?'checked':''}>MR walls</label>
     </div>
     <div class="surfaces">
