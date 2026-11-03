@@ -330,6 +330,7 @@ function secCalc(list,A,hd){
   return t;
 }
 function projCalc(p){
+  p=calculationProject(p);
   const A=p.assume;
   const units=p.unitTypes.map(u=>{const n=val(u.count),s=secCalc(u.rooms,A,u.h);return{u,n,s,w:n*s.w,c:n*s.c,m:n*s.m,tot:n*s.tot,ws:n*s.ws,cs:n*s.cs,ms:n*s.ms};});
   const groups=p.groups.map(g=>{const s=secCalc(g.rooms,A,g.h);return{g,s,w:s.w,c:s.c,m:s.m,tot:s.tot,ws:s.ws,cs:s.cs,ms:s.ms};});
@@ -463,15 +464,27 @@ function locate(id){
 }
 const findRoom=id=>{const l=locate(id);return l?l.list[l.idx]:null;};
 
+/* ---------- numbered units and inherited measurement templates ---------- */
+let selectedUnitId=null;
+const registeredUnits=p=>Array.isArray(p.unitRegister)?p.unitRegister:[];
+function resolvedUnit(p,entry){const type=p.unitTypes.find(u=>u.id===entry.typeId);if(!type)return null;const rooms=[...type.rooms,...(entry.extraRooms||[])].map(r=>{const patch=entry.areas?.[r.id]||{},base=roomSF(r,p.assume,type.h);return {...r,mode:'sf',walls:String(patch.w??base.w),mr:String(patch.m??base.m),ceilingMode:'area',clg:String(patch.c??base.c),qty:String(patch.qty??r.qty)};});return{...type,id:entry.id,name:`Unit ${entry.number}${entry.building?' · '+entry.building:''}${entry.floor?' · Floor '+entry.floor:''}`,count:'1',rooms};}
+function calculationProject(p){const entries=registeredUnits(p);if(!entries.length)return p;const units=[];for(const t of p.unitTypes){const assigned=entries.filter(e=>e.typeId===t.id),remaining=Math.max(0,val(t.count)-assigned.length);for(const e of assigned){const u=resolvedUnit(p,e);if(u)units.push(u);}if(remaining)units.push({...t,name:t.name+' — unassigned',count:String(remaining)});}return {...p,unitTypes:units,unitRegister:[]};}
+function addNumberedUnits(p,typeId,labels,building='',floor=''){const type=p.unitTypes.find(t=>t.id===typeId);if(!type)throw Error('Select a measurement type.');const names=unitLabels(labels);if(!names.length)throw Error('Enter apartment / unit numbers.');const entries=registeredUnits(p),seen=new Set(entries.map(e=>`${e.building||''}|${e.number}`.trim().toLowerCase()));for(const n of names){const key=`${building.trim()}|${n}`.toLowerCase();if(seen.has(key))throw Error(`Unit ${n} already exists in this building.`);seen.add(key);}if(entries.length+names.length>1000)throw Error('Maximum 1000 registered units per project.');p.unitRegister=[...entries,...names.map(number=>({id:uid(),number,typeId,building:building.trim(),floor:floor.trim(),areas:{}}))];const count=p.unitRegister.filter(e=>e.typeId===typeId).length;if(val(type.count)<count)type.count=String(count);return p.unitRegister[p.unitRegister.length-1].id;}
+function registerHTML(p){const entries=registeredUnits(p),entry=entries.find(e=>e.id===selectedUnitId),unit=entry&&resolvedUnit(p,entry);return `<div class="sec-head"><div><h2>Unit register</h2><p>Save each apartment number and its measurement type. Registered apartments replace slots in the type total; they are not added twice.</p></div></div><section class="request-card"><h3>Add apartments</h3><div class="grid"><label class="field"><span class="lbl">Measurement type</span><select id="register-type">${p.unitTypes.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label><label class="field"><span class="lbl">Apartment numbers (comma separated)</span><input id="register-numbers" placeholder="101, 102, 103"></label><label class="field"><span class="lbl">Building (optional)</span><input id="register-building"></label><label class="field"><span class="lbl">Floor (optional)</span><input id="register-floor"></label></div><button class="btn primary" data-register-action="add">Save units</button><p class="note">The type count is raised only if needed to fit the registered units. Unassigned slots continue using the type measurements.</p></section><div class="tbl"><table><thead><tr><th>Unit</th><th>Building</th><th>Floor</th><th>Type</th><th>Sheets</th><th></th></tr></thead><tbody>${entries.map(e=>{const u=resolvedUnit(p,e);return `<tr><td>${esc(e.number)}</td><td>${esc(e.building)}</td><td>${esc(e.floor)}</td><td>${esc(p.unitTypes.find(t=>t.id===e.typeId)?.name||'Missing type')}</td><td><span data-register-total="${e.id}">${u?fmt0(secCalc(u.rooms,p.assume).tot):'—'}</span></td><td><button class="btn sm" data-register-edit="${e.id}">View / edit areas</button></td></tr>`;}).join('')||'<tr><td colspan="6">No numbered units registered yet.</td></tr>'}</tbody></table></div>${unit?`<section class="request-card"><h3>${esc(unit.name)} — areas</h3><p class="note">Blank values follow the saved type. Enter ft² overrides only for this apartment; clear an override to follow the type again. Quantity changes only this apartment.</p><div class="tbl"><table><thead><tr><th>Area</th><th>Walls ft²</th><th>Ceiling ft²</th><th>MR ft²</th><th>Quantity</th></tr></thead><tbody>${unit.rooms.map(r=>{const base=p.unitTypes.find(t=>t.id===entry.typeId).rooms.find(x=>x.id===r.id)||(entry.extraRooms||[]).find(x=>x.id===r.id),sf=roomSF(base,p.assume,p.unitTypes.find(t=>t.id===entry.typeId).h),patch=entry.areas?.[r.id]||{};return `<tr><td>${esc(r.name||'Untitled')}${(entry.extraRooms||[]).some(x=>x.id===r.id)?` <button class="btn sm danger" data-register-action="removearea" data-entry="${entry.id}" data-extra-room="${r.id}">Remove area</button>`:''}</td>${[['w',sf.w],['c',sf.c],['m',sf.m],['qty',val(base.qty)]].map(([k,v])=>`<td><input aria-label="${esc(r.name)} ${k}" data-register-unit="${entry.id}" data-register-room="${r.id}" data-register-field="${k}" inputmode="decimal" placeholder="${esc(fmt(v))}" value="${esc(patch[k]??'')}"></td>`).join('')}</tr>`;}).join('')}</tbody></table></div><label class="field"><span class="lbl">Additional area in this apartment only</span><input id="register-area-name" placeholder="Storage / balcony / other"></label><button class="btn sm" data-register-action="addarea" data-entry="${entry.id}">+ Add area to this unit</button><button class="btn sm" data-register-action="reset" data-entry="${entry.id}">Reset area overrides</button><button class="btn sm danger" data-register-action="remove" data-entry="${entry.id}">Remove number from register</button><p class="note">Removing a number leaves its slot in the type total and removes its individual overrides.</p></section>`:''}`;}
+function registerInput(el,p){if(!el.dataset.registerField)return false;const entry=registeredUnits(p).find(e=>e.id===el.dataset.registerUnit);if(!entry)return true;entry.areas=entry.areas||{};const patch=entry.areas[el.dataset.registerRoom]||(entry.areas[el.dataset.registerRoom]={});const k=el.dataset.registerField;if(!el.value.trim())delete patch[k];else patch[k]=Math.max(0,val(el.value));touch();refreshAll();return true;}
+function registerClick(b,p){if(b.dataset.registerEdit){selectedUnitId=b.dataset.registerEdit;render();return true;}const action=b.dataset.registerAction;if(!action)return false;try{if(action==='add'){selectedUnitId=addNumberedUnits(p,$('#register-type').value,$('#register-numbers').value,$('#register-building').value,$('#register-floor').value);}else{const e=registeredUnits(p).find(x=>x.id===b.dataset.entry);if(!e)return true;if(action==='addarea'){const name=$('#register-area-name').value.trim();if(!name)throw Error('Name the additional area.');if((e.extraRooms||[]).length>=100)throw Error('Maximum 100 additional areas.');e.extraRooms=e.extraRooms||[];e.extraRooms.push({...newRoom(name),ceilingMode:'area'});}else if(!arm(b,'Confirm — tap again',null,'primary'))return true;if(action==='removearea'){e.extraRooms=(e.extraRooms||[]).filter(r=>r.id!==b.dataset.extraRoom);if(e.areas)delete e.areas[b.dataset.extraRoom];}if(action==='reset')e.areas={};if(action==='remove'){p.unitRegister=p.unitRegister.filter(x=>x.id!==e.id);selectedUnitId=null;}}touch();render();}catch(e){toast(e.message);}return true;}
+
 /* ---------- material requests: independent selections and frozen saved snapshots ---------- */
 let requestDrafts={},requestViews={};
 function requestDraft(p){return requestDrafts[currentId]||(requestDrafts[currentId]={name:'Material request',date:new Date().toLocaleDateString('en-CA'),notes:'',units:{},common:{},surfaces:{w:true,c:true,m:true},materials:p.mats.map(()=>true)});}
 function unitLabels(raw){return String(raw||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);}
 function selectedRequest(p,d){
-  const errors=[],seen=new Set(),scope=[],copy=JSON.parse(JSON.stringify(p));copy.unitTypes=[];copy.groups=[];delete copy.requests;
+  const errors=[],seen=new Set(),scope=[],copy=JSON.parse(JSON.stringify(p));copy.unitTypes=[];copy.groups=[];delete copy.requests;delete copy.unitRegister;
   const surfaces=d.surfaces||{};
   function filteredRoom(r,qty){const x={...r,qty:String(qty)};const s=roomSF(r,p.assume); // Convert selected surfaces to explicit areas without changing the source room.
     x.mode='sf';x.walls=surfaces.w?String(s.w):'0';x.mr=surfaces.m?String(s.m):'0';x.ceilingMode='area';x.clg=surfaces.c?String(s.c):'0';return x;}
+  if(registeredUnits(p).length){for(const entry of registeredUnits(p)){const pick=d.registered?.[entry.id];if(!pick?.selected)continue;const unit=resolvedUnit(p,entry);if(!unit){errors.push(`Unit ${entry.number}: missing type.`);continue;}const rooms=unit.rooms.filter(r=>!pick.rooms||pick.rooms[r.id]!==false).map(r=>filteredRoom(r,val(r.qty)));if(!rooms.length){errors.push(`${unit.name}: select at least one area.`);continue;}copy.unitTypes.push({...unit,rooms});scope.push({kind:'Unit',name:unit.name,count:1,labels:entry.number,rooms:rooms.map(r=>r.name).join(', ')});}}
+  else {
   for(const u of p.unitTypes){const pick=d.units[u.id];if(!pick)continue;const labels=unitLabels(pick.labels);const n=labels.length; if(!labels.length&&Number(pick.count||0)>0)errors.push(`${u.name}: enter the apartment / unit numbers.`);if(!Number.isFinite(n)){errors.push(`${u.name}: enter a valid quantity.`);continue;}if(!n)continue;
     if(!Number.isSafeInteger(n)||n<0||n>val(u.count)){errors.push(`${u.name}: choose a whole number from 0 to ${fmt(val(u.count))}.`);continue;}
     for(const label of labels){const key=label.toLowerCase();if(seen.has(key))errors.push(`Unit ${label} is listed more than once.`);seen.add(key);}
@@ -479,6 +492,7 @@ function selectedRequest(p,d){
       const s=roomSF(r,p.assume,u.h);x.walls=surfaces.w?String(s.w):'0';x.mr=surfaces.m?String(s.m):'0';return x;});
     if(!rooms.length){errors.push(`${u.name}: select at least one room.`);continue;}
     copy.unitTypes.push({...u,count:String(n),rooms});scope.push({kind:'Units',name:'Units '+labels.join(', '),count:n,labels:labels.join(', '),rooms:rooms.map(r=>r.name).join(', ')});
+  }
   }
   for(const g of p.groups){const rooms=[];for(const r of g.rooms){const raw=d.common[r.id],q=raw?1:0;if(!Number.isFinite(q)){errors.push(`${r.name}: enter a valid quantity.`);continue;}if(!q)continue;if(!Number.isSafeInteger(q)||q<0||q>val(r.qty)){errors.push(`${g.name} / ${r.name}: choose a whole number from 0 to ${fmt(val(r.qty))}.`);continue;}
     const x=filteredRoom(r,q),s=roomSF(r,p.assume,g.h);x.walls=surfaces.w?String(s.w):'0';x.mr=surfaces.m?String(s.m):'0';rooms.push(x);scope.push({kind:'Common area',name:`${g.name} / ${r.name}`,count:q,labels:'',rooms:r.name});}
@@ -495,12 +509,14 @@ function requestsHTML(p){const list=Array.isArray(p.requests)?p.requests:[],view
   if(view)return `<div class="sec-head"><h2>Material requests</h2><div class="spacer"></div><button class="btn" data-request-action="new">+ New request</button><button class="btn" data-request-action="print">Print / Save PDF</button><button class="btn primary" data-request-action="excel">Export request Excel</button></div><p class="note">Saved request — quantities stay fixed even if the project changes later.</p>${requestReport(view)}${history}`;
   const d=requestDraft(p),calc=selectedRequest(p,d);
   return `<div class="sec-head"><div><h2>Material requests</h2><p>Select only what you need to order today. The full project stays unchanged.</p></div></div><div class="grid"><label class="field"><span class="lbl">Request name</span><input data-rq="name" value="${esc(d.name)}"></label><label class="field"><span class="lbl">Request date</span><input type="date" data-rq="date" value="${esc(d.date)}"></label></div><label class="field"><span class="lbl">Notes / delivery instructions</span><input data-rq="notes" value="${esc(d.notes)}"></label>
-  <h3>Units to request</h3><p class="note">Enter apartment / unit numbers separated by commas (101, 102, 103). The measurement template below is used only for calculation. Your request and printout identify the actual units. Ranges are not expanded.</p>${p.unitTypes.map(u=>{const pick=d.units[u.id]||{};return `<section class="request-card"><p class="note">Measurement template: ${esc(u.name)} · up to ${fmt(val(u.count))} units</p><label class="field"><span class="lbl">Apartment / unit numbers</span><input data-rqu="${u.id}" data-rqk="labels" value="${esc(pick.labels||'')}" placeholder="101, 102, 103"></label><details><summary>Rooms included (all by default)</summary><div class="request-checks">${u.rooms.map(r=>`<label><input type="checkbox" data-rqr="${u.id}" data-room-id="${r.id}" ${!pick.rooms||pick.rooms[r.id]!==false?'checked':''}> ${esc(r.name||'Untitled')}</label>`).join('')||'<p>Add rooms to this measurement template first.</p>'}</div></details></section>`;}).join('')}
+  <h3>Units / areas to request</h3>${registeredUnits(p).length?`<p class="note">Choose registered apartments or select a whole type. Expand an apartment to request specific rooms only.</p>${p.unitTypes.map(type=>{const entries=registeredUnits(p).filter(e=>e.typeId===type.id);return `<section class="request-card"><h3>${esc(type.name)} — ${entries.length} registered</h3><button class="btn sm" data-request-type="${type.id}">Select all this type</button><button class="btn sm" data-request-type-clear="${type.id}">Clear this type</button>${entries.map(e=>{const pick=d.registered?.[e.id]||{},unit=resolvedUnit(p,e);return `<div class="request-card"><label><input type="checkbox" data-rq-entry="${e.id}" ${pick.selected?'checked':''}> ${esc(unit.name)}</label><details><summary>Choose areas in unit ${esc(e.number)}</summary><div class="request-checks">${unit.rooms.map(r=>`<label><input type="checkbox" data-rq-entry-room="${e.id}" data-room-id="${r.id}" ${!pick.rooms||pick.rooms[r.id]!==false?'checked':''}> ${esc(r.name||'Untitled')}</label>`).join('')}</div></details></div>`;}).join('')}</section>`;}).join('')}<p class="note">Add or assign more apartment numbers in Unit register. Unassigned type slots are not automatically requested.</p>`:`<p class="note">Register your apartment numbers in Unit register to reuse them in future requests. Existing manual selection remains available below.</p>  <h3>Units to request</h3><p class="note">Enter apartment / unit numbers separated by commas (101, 102, 103). The measurement template below is used only for calculation. Your request and printout identify the actual units. Ranges are not expanded.</p>${p.unitTypes.map(u=>{const pick=d.units[u.id]||{};return `<section class="request-card"><p class="note">Measurement template: ${esc(u.name)} · up to ${fmt(val(u.count))} units</p><label class="field"><span class="lbl">Apartment / unit numbers</span><input data-rqu="${u.id}" data-rqk="labels" value="${esc(pick.labels||'')}" placeholder="101, 102, 103"></label><details><summary>Rooms included (all by default)</summary><div class="request-checks">${u.rooms.map(r=>`<label><input type="checkbox" data-rqr="${u.id}" data-room-id="${r.id}" ${!pick.rooms||pick.rooms[r.id]!==false?'checked':''}> ${esc(r.name||'Untitled')}</label>`).join('')||'<p>Add rooms to this measurement template first.</p>'}</div></details></section>`;}).join('')}
+`}
   <h3>Common areas</h3><p class="note">Choose each existing common area once. No repeated quantity is added.</p><div class="request-card"><label class="field"><span class="lbl">Add a common area</span><select data-rq-common-add="1"><option value="">Select a common area…</option>${p.groups.map(g=>`<optgroup label="${esc(g.name)}">${g.rooms.filter(r=>!d.common[r.id]).map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')}</optgroup>`).join('')}</select></label><div>${p.groups.map(g=>g.rooms.filter(r=>d.common[r.id]).map(r=>`<div class="row" style="margin:10px 0"><span>${esc(g.name)} / ${esc(r.name)}</span><button class="btn sm" data-request-remove-common="${r.id}" aria-label="Remove ${esc(r.name)}">Remove</button></div>`).join('')).join('')||'<p class="note">No common areas selected.</p>'}</div></div>
   <h3>Surfaces and materials</h3><div class="request-checks">${[['w','Walls'],['c','Ceiling'],['m','MR']].map(([k,label])=>`<label><input type="checkbox" data-rqs="${k}" ${d.surfaces[k]?'checked':''}> ${label}</label>`).join('')}</div><div class="request-checks">${p.mats.map((m,i)=>`<label><input type="checkbox" data-rqm="${i}" ${d.materials[i]!==false?'checked':''}> ${esc(m.name)}</label>`).join('')}</div><div id="request-preview">${requestPreview(calc)}</div><button class="btn primary" data-request-action="save">Save request</button>${history}`;
 }
 function requestPreview(c){return `<p class="note">${c.errors.length?esc(c.errors.join(' ')):`Selected: ${fmt0(c.totals.nUnits)} units · Walls ${fmt0(c.totals.sheets.w)} / Ceiling ${fmt0(c.totals.sheets.c)} / MR ${fmt0(c.totals.sheets.m)} = ${fmt0(c.totals.grand.tot)} sheets. Save to print or export this selection.`}</p>`;}
 function requestInput(el,p){if(!Object.keys(el.dataset).some(k=>k.startsWith('rq')))return false;const d=requestDraft(p);
+  if(el.dataset.rqEntry||el.dataset.rqEntryRoom){d.registered=d.registered||{};const id=el.dataset.rqEntry||el.dataset.rqEntryRoom;const pick=d.registered[id]||(d.registered[id]={selected:false,rooms:{}});if(el.dataset.rqEntry)pick.selected=el.checked;else{pick.rooms=pick.rooms||{};pick.rooms[el.dataset.roomId]=el.checked;}}
   if(el.dataset.rqCommonAdd){if(el.value)d.common[el.value]='1';render();return true;}
   if(el.dataset.rq)d[el.dataset.rq]=el.value;
   if(el.dataset.rqu){const u=d.units[el.dataset.rqu]||(d.units[el.dataset.rqu]={});u[el.dataset.rqk]=el.value;}
@@ -511,7 +527,7 @@ function requestInput(el,p){if(!Object.keys(el.dataset).some(k=>k.startsWith('rq
   const preview=$('#request-preview');if(preview)preview.innerHTML=requestPreview(selectedRequest(p,d));return true;
 }
 async function requestExcel(r){if(!window.ExcelJS){toast('Excel generator unavailable. Reload online.');return;}try{const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Material request');ws.columns=[{width:48},{width:24},{width:36},{width:54}];ws.addRow(['MATERIAL REQUEST',r.name]);ws.addRow(['Project',r.projectName]);ws.addRow(['Address',r.address]);ws.addRow(['Date',r.date]);ws.addRow(['Reference',r.id]);ws.addRow(['Notes',r.notes]);ws.addRow([]);ws.addRow(['Unit / Area','Quantity','Unit numbers','Rooms']);r.scope.forEach(s=>ws.addRow([s.name,s.count,s.labels,s.rooms]));ws.addRow([]);ws.addRow(['Surface','Area ft²','Sheet size ft²','Sheets']);[['Walls','w','wall'],['Ceiling','c','clg'],['MR','m','mr']].filter(([,k])=>r.surfaces[k]).forEach(([l,k,size])=>ws.addRow([l,r.totals.grand[k],r.assume[size],r.totals.sheets[k]]));ws.addRow(['TOTAL SHEETS','','',r.totals.grand.tot]);ws.addRow([]);ws.addRow(['Material','Quantity (+ waste)','Pack size','Packs to order']);r.totals.mats.forEach(m=>ws.addRow([m.name,`${m.qty} ${m.qtyUnit}`,`${m.pack} ${m.packUnit}`,m.packs]));ws.addRow(['Saved snapshot. Previous requests are not automatically subtracted.']);ws.eachRow(row=>{row.alignment={wrapText:true,vertical:'top'};});ws.getRow(1).font={bold:true,size:16};ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};const buf=await wb.xlsx.writeBuffer(),url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const a=document.createElement('a');a.href=url;a.download=`Material request - ${r.name.replace(/[\\/:*?"<>|]/g,'-')}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Request Excel generated.');}catch(e){console.error(e);toast('Could not generate request Excel.');}}
-async function requestClick(b,p){if(b.dataset.requestRemoveCommon){delete requestDraft(p).common[b.dataset.requestRemoveCommon];render();return true;}if(b.dataset.requestView){requestViews[currentId]=b.dataset.requestView;render();return true;}const act=b.dataset.requestAction;if(!act)return false;
+async function requestClick(b,p){if(b.dataset.requestType||b.dataset.requestTypeClear){const d=requestDraft(p);d.registered=d.registered||{};const type=b.dataset.requestType||b.dataset.requestTypeClear;for(const e of registeredUnits(p).filter(e=>e.typeId===type)){const pick=d.registered[e.id]||(d.registered[e.id]={rooms:{}});pick.selected=!!b.dataset.requestType;}render();return true;}if(b.dataset.requestRemoveCommon){delete requestDraft(p).common[b.dataset.requestRemoveCommon];render();return true;}if(b.dataset.requestView){requestViews[currentId]=b.dataset.requestView;render();return true;}const act=b.dataset.requestAction;if(!act)return false;
   if(act==='new'){delete requestViews[currentId];delete requestDrafts[currentId];render();return true;}
   if(act==='save'){try{const r=requestSnapshot(p,requestDraft(p));if(!Array.isArray(p.requests))p.requests=[];p.requests.push(r);if(!touch()){p.requests.pop();toast('Could not save request. Keep this page open.');return true;}requestViews[currentId]=r.id;delete requestDrafts[currentId];render();toast('Request saved — syncing online.');}catch(e){toast(e.message);}return true;}
   const r=(p.requests||[]).find(x=>x.id===requestViews[currentId]);if(!r)return true;
@@ -531,12 +547,13 @@ function render(){
   if(tab==='project')m.innerHTML=projectHTML(p);
   else if(tab==='summary')m.innerHTML=summaryHTML(p);
   else if(tab==='requests')m.innerHTML=requestsHTML(p);
+  else if(tab==='register')m.innerHTML=registerHTML(p);
   else m.innerHTML=sectionHTML(p,tab);
   refreshAll();
 }
 function renderTabs(p){
   const nRooms=l=>l.reduce((a,c)=>a+c.rooms.length,0);
-  const t=[['project','Project',''],['units','Unit types',p.unitTypes.length],['common','Common areas',nRooms(p.groups)],['summary','Summary',''],['requests','Material requests','']];
+  const t=[['project','Project',''],['units','Unit types',p.unitTypes.length],['common','Common areas',nRooms(p.groups)],['register','Unit register',registeredUnits(p).length],['summary','Summary',''],['requests','Material requests','']];
   $('#tabs').innerHTML=t.map(([k,l,c])=>`<button data-tab="${k}" class="${tab===k?'on':''}">${l}${c!==''?`<span class="count">${c}</span>`:''}</button>`).join('');
 }
 function renderHome(){
@@ -684,11 +701,12 @@ function refreshAll(){
     set('msx',r.mode==='lf'?`${fmt(c.ml)} LF × ${fmt(c.H)} ft = ${fmt(c.m)} ft² · ${c.ms} sheets`:r.mode==='dim'?(c.m?c.ms+' sheets':''):ex('mr',c.m,c.ms));
   });
   const t=projCalc(p);
+  document.querySelectorAll('[data-register-total]').forEach(el=>{const e=registeredUnits(p).find(e=>e.id===el.dataset.registerTotal),u=e&&resolvedUnit(p,e);el.textContent=u?fmt0(secCalc(u.rooms,p.assume).tot):'—';});
   $('#k-tot').textContent=fmt0(t.grand.tot);$('#k-w').textContent=fmt0(t.sheets.w);$('#k-c').textContent=fmt0(t.sheets.c);$('#k-m').textContent=fmt0(t.sheets.m);
   $('#pname').textContent='· '+(p.name||'Untitled');
   if(tab==='units'||tab==='common'){
     const cur=activeCtr(p,tab);
-    if(cur){const s=secCalc(cur.rooms,A,cur.h);const per=$('#ctrPer');if(per)per.textContent=fmt0(s.tot);const all=$('#ctrAll');if(all)all.textContent=fmt0(s.tot*val(cur.count));}
+    if(cur){const s=secCalc(cur.rooms,A,cur.h);const per=$('#ctrPer');if(per)per.textContent=fmt0(s.tot);const all=$('#ctrAll');if(all)all.textContent=fmt0(projCalc({...p,unitTypes:[cur],groups:[]}).grand.tot);}
   }
   const sT=$('#sumT');
   if(sT){
@@ -717,11 +735,12 @@ function refreshAll(){
 /* ---------- events ---------- */
 document.addEventListener('input',e=>{
   const el=e.target,p=projects[currentId];if(!p)return;
+  if(registerInput(el,p))return;
   if(requestInput(el,p))return;
   if(el.dataset.p){p[el.dataset.p]=el.value;}
   else if(el.dataset.a){p.assume[el.dataset.a]=el.dataset.a==='waste'?(val(el.value)/100):val(el.value);}
   else if(el.dataset.m){const[i,k]=el.dataset.m.split('.');p.mats[+i][k]=val(el.value);}
-  else if(el.dataset.c){const cur=activeCtr(p,tab);if(!cur)return;cur[el.dataset.c]=el.value;$('#ctrBar').innerHTML=ctrBarHTML(p,tab);}
+  else if(el.dataset.c){const cur=activeCtr(p,tab);if(!cur)return;cur[el.dataset.c]=el.value;if(tab==='units'&&el.dataset.c==='count'){const min=registeredUnits(p).filter(e=>e.typeId===cur.id).length;if(val(cur.count)<min){cur.count=String(min);el.value=cur.count;toast('Count cannot be less than the registered apartments.');}}$('#ctrBar').innerHTML=ctrBarHTML(p,tab);}
   else if(el.dataset.f){const room=el.closest('.room');const r=findRoom(room.dataset.id);r[el.dataset.f]=el.type==='checkbox'?el.checked:el.value;}
   else return;
   refreshAll();touch();
@@ -747,9 +766,10 @@ document.addEventListener('click',async e=>{
   if(b.id==='exportBtn'||b.dataset.act==='export'){exportXlsx();return;}
   if(b.dataset.act==='newp'){const id=uid();projects[id]=newProject();currentId=id;tab='project';active={units:null,common:null};touch();render();setTimeout(()=>{const n=$('#p-name');n&&(n.focus(),n.select());},50);return;}
   if(b.dataset.open){currentId=b.dataset.open;active={units:null,common:null};if(normalize(projects[currentId]))touch();tab='units';render();window.scrollTo(0,0);return;}
-  if(b.dataset.dupp){const id=uid();const c=clean(projects[b.dataset.dupp]);normalize(c);c.name=(c.name||'')+' (copy)';c.updatedAt=Date.now();[...c.unitTypes,...c.groups].forEach(x=>{x.id=uid();x.rooms.forEach(r=>r.id=uid());});projects[id]=c;currentId=id;touch();currentId=null;render();toast('Project duplicated');return;}
+  if(b.dataset.dupp){const id=uid();const c=clean(projects[b.dataset.dupp]);normalize(c);c.name=(c.name||'')+' (copy)';c.updatedAt=Date.now();const ids={};[...c.unitTypes,...c.groups].forEach(x=>{const old=x.id;x.id=uid();ids[old]=x.id;x.rooms.forEach(r=>{const old=r.id;r.id=uid();ids[old]=r.id;});});registeredUnits(c).forEach(e=>{e.id=uid();e.typeId=ids[e.typeId]||e.typeId;e.areas=Object.fromEntries(Object.entries(e.areas||{}).map(([id,v])=>[ids[id]||id,v]));});projects[id]=c;currentId=id;touch();currentId=null;render();toast('Project duplicated');return;}
   if(b.dataset.delp){if(arm(b,'Sure? Tap again','Delete','primary')){await removeProject(b.dataset.delp);render();toast('Project deleted');}return;}
   const p=projects[currentId];if(!p)return;
+  if(registerClick(b,p))return;
   if(await requestClick(b,p))return;
   if(b.dataset.ctr){active[tab]=b.dataset.ctr;render();return;}
   if(b.dataset.act==='addctr'){
@@ -767,6 +787,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.act==='delctr'){
     if(!arm(b,'Sure? Tap again',null,'primary'))return;
     const list=ctrList(p,tab),cur=activeCtr(p,tab);if(!cur)return;
+    if(tab==='units'&&registeredUnits(p).some(e=>e.typeId===cur.id)){toast('This type has registered apartments. Remove their numbers from the register first.');return;}
     list.splice(list.indexOf(cur),1);active[tab]=null;touch();render();toast(`${cur.name||'Group'} deleted`);return;
   }
   if(b.dataset.chip||b.dataset.act==='add'){addRoom(p,b.dataset.chip||'');return;}
@@ -812,7 +833,7 @@ let toastT;function toast(t){const el=$('#toast');el.textContent=t;el.hidden=fal
 
 /* ---------- Excel export (Template layout, one block per unit type and per level/building, live formulas) ---------- */
 async function exportXlsx(){
-  const p=projects[currentId];if(!p)return;
+  const original=projects[currentId];if(!original)return;const p=calculationProject(original);
   if(!window.ExcelJS){toast('The Excel generator did not load. Check your connection.');return;}
   const A=p.assume,t=projCalc(p);
   const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Takeoff',{views:[{showGridLines:false}]});

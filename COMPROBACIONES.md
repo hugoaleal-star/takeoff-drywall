@@ -13,3 +13,11 @@ Pendiente: impresión física y prueba de descarga/impresión en un iPad físico
 - Las nuevas solicitudes requieren números de unidad; el informe usa Units 101, 102, 103 en lugar del nombre del tipo.
 - Áreas comunes seleccionadas desde lista desplegable, sin duplicados ni multiplicadores: una cantidad de 4 en el proyecto no se convierte en 4 pedidos del mismo espacio.
 - Comprobados los totales, duplicados de unidad, selección vacía y conservación de las medidas originales. Las solicitudes anteriores conservan sus cantidades guardadas.
+
+## v13: registro de unidades
+- Asignación de números a tipos, edificios y pisos; detección de duplicados por edificio.
+- Herencia de medidas, ajustes independientes, actualización de plantilla y áreas exclusivas.
+- Sin duplicar totales: tipos completos = apartamentos registrados + plazas restantes.
+- Solicitudes de una unidad, áreas específicas y selección por tipo.
+- Proyección de cálculo idempotente para el Excel completo; se conserva el comportamiento de los proyectos sin registro.
+- Navegador y guardado real: 20 unidades, 3 registradas, total conservado de 140 hojas; ajuste solo del apartamento 103 eleva el total a 144.
