@@ -1,9 +1,10 @@
-# Comprobaciones v10
+# Comprobaciones v11 — Material requests
 
-- Servidor real publicado en Cloudflare Workers con D1 persistente.
-- Prueba en HTTPS: salud 200 y CORS del origen GitHub correcto.
-- Dos sesiones independientes: crear, leer, editar, detectar conflicto 409, propagar borrado lógico; escrituras sin sesión rechazadas 401.
-- Prueba automatizada del cliente: dos dispositivos simulados, cambios sin conexión recuperados al reabrir, copias de conflictos e importación local sin sobreescritura del remoto.
-- Cálculos anteriores conservados. Caché takeoff-drywall-v10, misma clave takeoff_drywall_v1.
+- 100 proyectos mixtos LF/ft²/Dimensions: cálculos completos idénticos a v10.
+- Selección parcial de unidades, números de apartamento, validación de duplicados y cantidades máximas, herencia de altura, áreas comunes parciales, filtros de superficies y materiales.
+- Fuente sin modificar y solicitudes guardadas fijas aunque cambie el proyecto.
+- Excel generado y reabierto: filas y cantidades de la solicitud verificadas.
+- Navegador conectado a Cloudflare: solicitud de tres apartamentos guardada con 12 hojas de Walls + 9 de Ceiling = 21, frente al proyecto completo de 140.
+- Impresión usa un informe separado del formulario y de los totales completos.
 
-Pendiente: comprobación física en iPad de instalación, modo avión y descarga Excel. Las pruebas de servidor no sustituyen la prueba física en Safari.
+Pendiente: impresión física y prueba de descarga/impresión en un iPad físico.
