@@ -81,7 +81,7 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .racts{display:flex;gap:6px}
 .icon-btn{width:46px;height:46px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);display:grid;place-items:center;font-size:18px}
 .icon-btn.confirm{background:var(--danger);color:#fff;border-color:var(--danger);width:auto;padding:0 12px;font-size:14px;font-weight:600}
-.surfaces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.surfaces{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .dims{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:8px;align-items:start}
 .dims .toggle{margin-top:24px}
 .surf{display:flex;flex-direction:column;gap:5px;min-width:0;border-left:4px solid var(--c);padding-left:8px}
@@ -109,6 +109,8 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .room-height{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface2)}
 .room-height .calc{font-size:13px;color:var(--muted)}
 @media(max-width:640px){.room-height{grid-template-columns:1fr}}
+.ceiling-panel{border:1px solid var(--line);border-left:4px solid var(--clg);border-radius:10px;padding:12px;background:var(--surface2)}
+.ceiling-inputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.ceiling-panel .seg{height:auto;min-height:44px;flex-wrap:wrap}.ceiling-panel .seg button{min-height:44px;padding:8px 12px}.ceiling-result{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;color:var(--clg)}
 .hq{display:flex;gap:6px;flex-wrap:wrap}
 .hq-b{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);font-family:var(--f-num);font-size:14px;font-weight:600}
 .hq-b.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
@@ -262,7 +264,7 @@ function lenTxt(n){
 }
 
 /* ---------- model ---------- */
-function newRoom(name=''){return{id:uid(),name,qty:'1',mode:'sf',walls:'',clg:'',mr:'',wallsLF:'',mrLF:'',L:'',W:'',H:'',mrWalls:MR_HINT.test(name)};}
+function newRoom(name=''){return{id:uid(),name,qty:'1',mode:'sf',walls:'',clg:'',mr:'',wallsLF:'',mrLF:'',ceilingMode:'dimensions',clgL:'',clgW:'',L:'',W:'',H:'',mrWalls:MR_HINT.test(name)};}
 const newUnitType=(name='Unit A',count='1')=>({id:uid(),name,count,rooms:[]});
 const newGroup=(name='Level 1')=>({id:uid(),name,rooms:[]});
 function newProject(){
@@ -287,18 +289,25 @@ function normalize(p){
 }
 // Decimal/summed linear feet, or a single feet/inches/metric measurement.
 const linearFeet=raw=>/[\'"’‘′”“″]/.test(String(raw||''))||/(?:mm|cm|m|ft|feet|in|inch|inches)\s*$/i.test(String(raw||''))?parseLen(raw):val(raw);
+function ceilingCalc(r){
+  // Legacy rooms retain their original ceiling source until explicitly changed.
+  const mode=r.ceilingMode||(r.mode==='dim'?'room':'area');
+  if(mode==='area')return{mode,area:val(r.clg)};
+  const L=parseLen(mode==='room'?r.L:r.clgL),W=parseLen(mode==='room'?r.W:r.clgW);
+  return{mode,L,W,area:L*W};
+}
 function roomSF(r,A,hd){
   const q=val(r.qty);
   if(r.mode==='lf'){
     const H=parseLen(r.H)||parseLen(hd)||+A.h||0,wl=linearFeet(r.wallsLF),ml=linearFeet(r.mrLF);
-    return{q,w:wl*H,c:val(r.clg),m:ml*H,H,wl,ml};
+    return{q,w:wl*H,c:ceilingCalc(r).area,m:ml*H,H,wl,ml};
   }
   if(r.mode==='dim'){
     const L=parseLen(r.L),W=parseLen(r.W),H=parseLen(r.H)||parseLen(hd)||+A.h||0;
-    const wallSF=2*(L+W)*H,clg=L*W;
+    const wallSF=2*(L+W)*H,clg=ceilingCalc(r).area;
     return{q,w:r.mrWalls?0:wallSF,c:clg,m:r.mrWalls?wallSF:0,L,W,H};
   }
-  return{q,w:val(r.walls),c:val(r.clg),m:val(r.mr)};
+  return{q,w:val(r.walls),c:ceilingCalc(r).area,m:val(r.mr)};
 }
 function roomCalc(r,A,hd){
   const s=roomSF(r,A,hd),k=1+(+A.waste||0);
@@ -437,7 +446,7 @@ function sectionHTML(p,t){
   ${chipRow(t==='common'?'Shared spaces':'',CHIPS[t])}${t==='common'?chipRow('Amenities',CHIPS.amenities):''}
   <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):emptyRooms()}</div>
   <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
-  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Select Linear ft (LF) for wall lengths × room height, Square ft (ft²) for already calculated areas, or Dimensions for a rectangular room. Linear and square-foot wall entries are kept separately when switching modes. Ceiling is always an area in ft². With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
+  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Select Linear ft (LF) for wall lengths × room height, Square ft (ft²) for already calculated areas, or Dimensions for a rectangular room. Linear and square-foot wall entries are kept separately when switching modes. Ceiling has its own Length × Width or Area (ft²) selection; height is not used for Ceiling. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
 }
 const chipRow=(label,list)=>`${label?`<div class="chip-lbl">${label}</div>`:''}<div class="chips">${list.map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>`;
 const emptyRooms=()=>`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`;
@@ -452,11 +461,10 @@ function roomHTML(r){
     </div>
     <div class="surfaces">
       <div class="surf s-w"><span class="lbl">Walls ft²</span><b class="num" data-o="w">0</b><span class="calc" data-o="wsx"></span></div>
-      <div class="surf s-c"><span class="lbl">Ceiling ft²</span><b class="num" data-o="c">0</b><span class="calc" data-o="csx"></span></div>
       <div class="surf s-m"><span class="lbl">MR ft²</span><b class="num" data-o="m">0</b><span class="calc" data-o="msx"></span></div>
     </div>`:`
     <div class="surfaces">
-      ${r.mode==='lf'?sfIn(r,'wallsLF','Walls — linear ft (LF)','s-w','wsx'):sfIn(r,'walls','Walls — square ft (ft²)','s-w','wsx')}${sfIn(r,'clg','Ceiling — square ft (ft²)','s-c','csx')}${r.mode==='lf'?sfIn(r,'mrLF','MR — linear ft (LF)','s-m','msx'):sfIn(r,'mr','MR — square ft (ft²)','s-m','msx')}
+      ${r.mode==='lf'?sfIn(r,'wallsLF','Walls — linear ft (LF)','s-w','wsx'):sfIn(r,'walls','Walls — square ft (ft²)','s-w','wsx')}${r.mode==='lf'?sfIn(r,'mrLF','MR — linear ft (LF)','s-m','msx'):sfIn(r,'mr','MR — square ft (ft²)','s-m','msx')}
     </div>`;
   return`<div class="room" data-id="${r.id}">
     <div class="room-head">
@@ -469,11 +477,29 @@ function roomHTML(r){
       <label class="field"><span class="lbl">Room height (ft)</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Default height" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span></label>
       <div><div class="hq" role="group" aria-label="Quick room height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</div><p class="note">Changes only this room. Clear to use the unit / level default.</p></div>
     </div>
-    <p class="note">${r.mode==='lf'?'Linear ft: enter total wall lengths. Walls and MR are multiplied by room height. Ceiling stays in square ft.':r.mode==='dim'?'Dimensions: Walls = 2 × (Length + Width) × Height. Ceiling = Length × Width.':'Square ft: enter finished wall and ceiling areas. Height is already included; it is not multiplied again.'}</p>
+    <p class="note">${r.mode==='lf'?'Linear ft: enter total wall lengths. Walls and MR are multiplied by room height. Ceiling is calculated separately below from Length × Width or an entered area.':r.mode==='dim'?'Dimensions: Walls = 2 × (Length + Width) × Height. Choose the ceiling measurement below.':'Square ft: enter finished wall areas. Height is already included; it is not multiplied again.'}</p>
     ${body}
+    ${ceilingHTML(r)}
     <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
     <div class="room-save"><button class="btn" data-act="done">✓ Save room</button><button class="btn primary" data-act="donenext">Save &amp; add another</button></div>
   </div>`;
+}
+function ceilingHTML(r){
+  const c=ceilingCalc(r);
+  return`<section class="ceiling-panel" aria-label="Ceiling calculation">
+    <div class="lbl" style="color:var(--clg);margin-bottom:8px">Ceiling</div>
+    <div class="seg" role="group" aria-label="Ceiling entry mode">
+      <button data-ceiling-mode="dimensions" class="${c.mode==='dimensions'?'on':''}">Length × Width</button>
+      <button data-ceiling-mode="area" class="${c.mode==='area'?'on':''}">Area (ft²)</button>
+      ${r.mode==='dim'||c.mode==='room'?`<button data-ceiling-mode="room" class="${c.mode==='room'?'on':''}">Use room dimensions</button>`:''}
+    </div>
+    ${c.mode==='area'?`<label class="field" style="margin-top:10px"><span class="lbl">Ceiling area (ft²)</span><input id="r-${r.id}-clg" data-f="clg" inputmode="decimal" value="${esc(r.clg)}" placeholder="Area already calculated"></label>`:c.mode==='room'?`<p class="note">Uses the saved room dimensions: ${fmt(c.L)} ft × ${fmt(c.W)} ft.</p>`:`<div class="ceiling-inputs">
+      <label class="field"><span class="lbl">Ceiling length (ft)</span><input id="r-${r.id}-clgL" data-f="clgL" inputmode="decimal" value="${esc(r.clgL)}" placeholder="12'6&quot;" enterkeyhint="next" autocomplete="off"></label>
+      <label class="field"><span class="lbl">Ceiling width (ft)</span><input id="r-${r.id}-clgW" data-f="clgW" inputmode="decimal" value="${esc(r.clgW)}" placeholder="10'" enterkeyhint="next" autocomplete="off"></label>
+    </div>`}
+    <div class="ceiling-result"><strong class="num" data-o="ceiling-area"></strong><strong class="num" data-o="ceiling-sheets"></strong></div>
+    <p class="note" data-o="ceiling-formula"></p>
+  </section>`;
 }
 const sfIn=(r,k,l,c,o)=>`<label class="surf ${c}"><span class="lbl">${l}</span><input id="r-${r.id}-${k}" data-f="${k}" inputmode="decimal" value="${esc(r[k])}" enterkeyhint="next"><span class="calc" data-o="${o}"></span></label>`;
 
@@ -504,7 +530,9 @@ function refreshAll(){
     if(r.mode==='dim'){set('Lx',show(r.L));set('Wx',show(r.W));}
     const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} sheets`:'');};
     set('wsx',r.mode==='lf'?`${fmt(c.wl)} LF × ${fmt(c.H)} ft = ${fmt(c.w)} ft² · ${c.ws} sheets`:r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
-    set('csx',r.mode==='dim'?(c.c?c.cs+' sheets':''):ex('clg',c.c,c.cs));
+    const ceiling=ceilingCalc(r);
+    set('ceiling-area',`${fmt(c.c)} ft²`);set('ceiling-sheets',`${fmt0(c.cs)} ceiling sheets`);
+    set('ceiling-formula',`${ceiling.mode==='area'?'Area entered directly':`${fmt(ceiling.L)} ft × ${fmt(ceiling.W)} ft`} = ${fmt(c.c)} ft². Sheets: round up ${fmt(c.c)} ÷ ${fmt(+A.clg||1)} × (1 + ${fmt((+A.waste||0)*100)}% waste).`);
     set('msx',r.mode==='lf'?`${fmt(c.ml)} LF × ${fmt(c.H)} ft = ${fmt(c.m)} ft² · ${c.ms} sheets`:r.mode==='dim'?(c.m?c.ms+' sheets':''):ex('mr',c.m,c.ms));
   });
   const t=projCalc(p);
@@ -595,6 +623,11 @@ document.addEventListener('click',async e=>{
   const room=b.closest('.room');if(!room)return;
   const id=room.dataset.id,loc=locate(id);if(!loc)return;
   const list=loc.list,idx=loc.idx;
+  if(b.dataset.ceilingMode){
+    const r=list[idx];
+    if(b.dataset.ceilingMode==='dimensions'&&ceilingCalc(r).mode==='room'&&r.clgL===undefined&&r.clgW===undefined){r.clgL=r.L||'';r.clgW=r.W||'';}
+    r.ceilingMode=b.dataset.ceilingMode;touch();room.outerHTML=roomHTML(r);refreshAll();return;
+  }
   if(b.dataset.hq){const r=list[idx];const v=b.dataset.hq+"'";r.H=(String(r.H||'').trim()!==''&&parseLen(r.H)===+b.dataset.hq)?'':v;const inp=document.getElementById(`r-${r.id}-H`);if(inp)inp.value=r.H;touch();refreshAll();return;}
   if(b.dataset.act==='done'||b.dataset.act==='donenext'){
     const r=list[idx];
@@ -690,14 +723,16 @@ async function exportXlsx(){
       const row=b.start+i,c=roomCalc(r,A,b.h);
       C('B'+row,r.name||null);C('C'+row,c.q);
       if(r.mode==='lf')F('D'+row,`${c.wl}*${c.H}`,c.w);else C('D'+row,c.w||null);F('E'+row,`ROUNDUP(D${row}/$K$5*(1+$K$8),0)`,c.ws);
-      C('F'+row,c.c||null);F('G'+row,`ROUNDUP(F${row}/$K$6*(1+$K$8),0)`,c.cs);
+      const ceiling=ceilingCalc(r);if(ceiling.mode==='area')C('F'+row,c.c||null);else F('F'+row,`${ceiling.L}*${ceiling.W}`,c.c);F('G'+row,`ROUNDUP(F${row}/$K$6*(1+$K$8),0)`,c.cs);
       if(r.mode==='lf')F('H'+row,`${c.ml}*${c.H}`,c.m);else C('H'+row,c.m||null);F('I'+row,`ROUNDUP(H${row}/$K$7*(1+$K$8),0)`,c.ms);
       F('J'+row,`E${row}+G${row}+I${row}`,c.per);F('K'+row,`C${row}*J${row}`,c.tot);
-      if(r.mode==='lf')C('L'+row,`Linear ft: Walls ${r.wallsLF||0} LF; MR ${r.mrLF||0} LF × h ${lenTxt(c.H)}; Ceiling ${r.clg||0} ft²`);
+      if(r.mode==='lf')C('L'+row,`Linear ft: Walls ${r.wallsLF||0} LF; MR ${r.mrLF||0} LF × h ${lenTxt(c.H)}`);
       else if(r.mode==='dim')C('L'+row,`${lenTxt(c.L)} × ${lenTxt(c.W)} × h ${lenTxt(c.H)}${r.mrWalls?' (MR walls)':''}`);
       else{const parts=[['W',r.walls],['C',r.clg],['MR',r.mr]].filter(([,v])=>isExpr(v)).map(([k,v])=>`${k}: ${v}`);if(parts.length)C('L'+row,parts.join('  '));}
+      const ceilingNote=ceiling.mode==='area'?`Ceiling area: ${fmt(ceiling.area)} ft²`:`Ceiling: ${lenTxt(ceiling.L)} × ${lenTxt(ceiling.W)} = ${fmt(ceiling.area)} ft²`;
       for(let cc=2;cc<=12;cc++){const cell=ws.getCell(row,cc);cell.border=box;if([3,4,6,8].includes(cc))cell.fill=inFill;if([4,6,8].includes(cc))cell.numFmt='#,##0.0';}
       ws.getCell('L'+row).font={color:{argb:'FF5A6775'},size:9};
+      C('L'+row,[ws.getCell('L'+row).value,ceilingNote].filter(Boolean).join(' | '));
     });
     const s=secCalc(b.rooms,A,b.h),st=b.start,en=b.end,sub=b.sub;
     C('B'+sub,'SUB-TOTAL');F('C'+sub,`SUM(C${st}:C${en})`,s.q);

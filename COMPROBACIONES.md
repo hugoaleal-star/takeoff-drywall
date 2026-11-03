@@ -1,18 +1,18 @@
-# Comprobaciones: pies lineales y pies cuadrados (v8)
+# Comprobaciones v9: Ceiling con largo y ancho
 
-- Se añadió Linear ft (LF): Walls LF × altura = Walls ft²; MR LF × altura = MR ft². Ceiling permanece en ft².
-- Square ft (ft²) conserva las áreas ya calculadas: no multiplica por altura.
-- Dimensions conserva el cálculo rectangular de largo, ancho y altura.
-- Las entradas lineales wallsLF/mrLF se guardan separadas de walls/mr para que cambiar de modo no reinterprete ni borre las medidas anteriores. Los proyectos antiguos conservan su modo y sus valores.
-- Se mantiene takeoff_drywall_v1, el mismo dominio y la misma ruta. No hay sincronización remota.
+- Ceiling tiene su propio selector Length × Width / Area (ft²), independiente del modo de Walls y MR. En Dimensions se puede conservar el uso de las dimensiones del cuarto.
+- Largo y ancho del Ceiling se guardan por separado del área directa. La altura no interviene en el área de Ceiling.
+- Hojas de Ceiling = redondear hacia arriba [área / tamaño de hoja × (1 + desperdicio)]. Se respetan cantidades de cuartos, unidades y materiales.
+- Los proyectos anteriores conservan su fuente de Ceiling: área directa en modos sf/lf y largo/ancho del cuarto en Dimensions. No se reinterpretan datos existentes.
+- Conserva takeoff_drywall_v1; caché takeoff-drywall-v9. No tiene backend ni sincronización remota.
 
 Pruebas realizadas:
 
-- 100 casos de regresión de proyectos anteriores sin diferencias de cálculo.
-- 50 LF × 9 ft = 450 ft² en Walls; 10 LF × 9 ft = 90 ft² en MR; Ceiling 200 ft² no cambia con la altura. Con supuestos predeterminados: 16 hojas por cuarto; al cambiar a 10 ft, 18 hojas.
-- Con ft² directos de 450 y 90, variar la altura no modifica las áreas ni las 16 hojas.
-- Probadas cantidades de cuartos, cantidad de unidades, altura predeterminada y específica, expresiones, pies/pulgadas y una medida métrica.
-- Excel generado y reabierto: fórmulas de conversión LF × altura, áreas, totales y anotación del modo comprobados.
-- Navegador integrado con proyecto local de prueba: selector de los tres modos, etiquetas LF/ft², cálculo visible de 450 ft², 16 hojas y conservación de las entradas al cambiar de modo. En ft², variar altura mantuvo las 16 hojas.
+- 100 proyectos anteriores comparados contra v8: áreas, hojas y materiales iguales, incluidos LF, ft² y Dimensions.
+- Ceiling de 20 × 10 ft: 200 ft² y 5 hojas con tamaño de 48 ft² y 5 % de desperdicio.
+- 12'6" × 10 ft: 125 ft² y 3 hojas. Cambiar la altura del cuarto no modifica Ceiling.
+- Cambiar a área directa utiliza su valor guardado; volver a largo × ancho conserva ambas medidas.
+- Excel generado y reabierto: fórmula 20*10 en el área, resultado de 5 hojas y total del proyecto comprobados.
+- Navegador integrado, proyecto local: campos de largo/ancho, cálculo visible de 200 ft² y 5 hojas comprobados.
 
-Pendiente: prueba en iPad físico, instalación desde Safari, modo avión y descarga real desde Safari.
+Pendiente: prueba en iPad físico, instalación desde Safari, modo avión y descarga real de Excel desde Safari.
