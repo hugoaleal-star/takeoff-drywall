@@ -8,3 +8,8 @@
 - Impresión usa un informe separado del formulario y de los totales completos.
 
 Pendiente: impresión física y prueba de descarga/impresión en un iPad físico.
+
+## v12
+- Las nuevas solicitudes requieren números de unidad; el informe usa Units 101, 102, 103 en lugar del nombre del tipo.
+- Áreas comunes seleccionadas desde lista desplegable, sin duplicados ni multiplicadores: una cantidad de 4 en el proyecto no se convierte en 4 pedidos del mismo espacio.
+- Comprobados los totales, duplicados de unidad, selección vacía y conservación de las medidas originales. Las solicitudes anteriores conservan sus cantidades guardadas.
