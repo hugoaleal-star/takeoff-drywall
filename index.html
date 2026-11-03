@@ -175,6 +175,7 @@ td input{min-height:38px;padding:6px 8px;width:90px;text-align:right}
   <div class="wrap"><nav class="tabs" id="tabs" hidden></nav></div>
 </header>
 
+<div class="wrap"><p class="note">Shared projects: anyone with this app link can view and edit them. Changes sync while online.</p></div>
 <main class="wrap" id="main"></main>
 
 <div class="bar" id="bar" hidden>
@@ -336,27 +337,107 @@ function projCalc(p){
   return{units,groups,grand,sheets,nUnits,mats};
 }
 
-/* ---------- local storage only; no remote backend ---------- */
+/* ---------- shared online storage with durable local pending changes ---------- */
+const SHARED_API='https://takeoff-drywall-shared.hugoaleal.workers.dev';
+const SYNC_KEY='takeoff_drywall_sync_v1';
 let projects={},currentId=null,tab='units',saveTimer=null;
-let active={units:null,common:null},loaded=true;
+let active={units:null,common:null},loaded=false,storageFailed=false;
+let syncMeta={revisions:{},pending:{},token:'',tokenExpires:0,sequence:0};
+let syncing=false,syncAgain=false;
+const clean=p=>JSON.parse(JSON.stringify(p));
 function setStatus(kind,text){const el=$('#status');el.className='status '+kind;el.querySelector('span').textContent=text;}
-let storageFailed=false;
 function lsRead(){
-  try{const raw=localStorage.getItem(LS_KEY);const data=JSON.parse(raw||'{}');
-    if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Invalid storage');
-    Object.keys(data).forEach(id=>{if(data[id]&&typeof data[id]==='object')normalize(data[id]);else delete data[id];});return data;
-  }catch(e){storageFailed=true;return {};}
+  try{const data=JSON.parse(localStorage.getItem(LS_KEY)||'{}');if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Invalid storage');Object.values(data).forEach(normalize);return data;}
+  catch(e){storageFailed=true;return {};}
 }
 function lsWrite(){
-  // Preserve unreadable existing storage instead of silently overwriting it.
-  if(storageFailed){setStatus('local','Saved data could not be read. Changes will not be saved.');return false;}
+  if(storageFailed){setStatus('local','Local data could not be read. Changes are not saved.');return false;}
   try{localStorage.setItem(LS_KEY,JSON.stringify(projects));return true;}
-  catch(e){setStatus('local','Could not save: export Excel before closing.');return false;}
+  catch(e){setStatus('local','Local save failed. Export Excel before closing.');return false;}
 }
-function initStore(){projects=lsRead();if(storageFailed)setStatus('local','Saved data could not be read. Changes will not be saved.');else setStatus('local','Saved on this device only');render();}
-const clean=p=>JSON.parse(JSON.stringify(p));
-function touch(){const p=projects[currentId];if(!p)return false;p.updatedAt=Date.now();if(lsWrite()){setStatus('local','Saved on this device only');return true;}return false;}
-async function removeProject(id){delete projects[id];if(lsWrite())setStatus('local','Saved on this device only');}
+function saveSync(){try{localStorage.setItem(SYNC_KEY,JSON.stringify(syncMeta));return true;}catch(e){setStatus('local','Pending changes could not be saved. Keep this page open.');return false;}}
+function queueChange(id,deleted=false){syncMeta.pending[id]={seq:++syncMeta.sequence,deleted};return saveSync();}
+function scheduleSync(delay=700){clearTimeout(saveTimer);saveTimer=setTimeout(syncShared,delay);}
+function touch(){const p=projects[currentId];if(!p)return false;p.updatedAt=Date.now();if(!lsWrite())return false;if(!queueChange(currentId))return false;setStatus('busy','Saved locally — syncing…');scheduleSync();return true;}
+async function removeProject(id){delete projects[id];if(!lsWrite())return;if(!queueChange(id,true))return;setStatus('busy','Deletion waiting to sync…');scheduleSync(0);}
+async function sharedRequest(path,options={}){
+  const control=new AbortController(),timeout=setTimeout(()=>control.abort(),12000);
+  try{return await fetch(SHARED_API+path,{...options,mode:'cors',credentials:'omit',cache:'no-store',signal:control.signal});}finally{clearTimeout(timeout);}
+}
+async function editToken(){
+  if(syncMeta.token&&syncMeta.tokenExpires>Date.now()+60000)return syncMeta.token;
+  const response=await sharedRequest('/api/session',{method:'POST'});if(!response.ok)throw Error('Shared editing is unavailable');const data=await response.json();syncMeta.token=data.token;syncMeta.tokenExpires=data.expiresAt;saveSync();return data.token;
+}
+function inputFocused(){return !!document.activeElement?.closest?.('#main input');}
+function sameProject(a,b){if(!a||!b)return false;const x=clean(a),y=clean(b);delete x.updatedAt;delete y.updatedAt;return JSON.stringify(x)===JSON.stringify(y);}
+function applyRemote(record){
+  if(record.deleted){delete projects[record.id];if(currentId===record.id){currentId=null;}}
+  else{projects[record.id]=record.project;normalize(projects[record.id]);}
+  syncMeta.revisions[record.id]=record.revision;
+}
+function keepConflict(id,record){
+  const pending=syncMeta.pending[id];if(!pending)return;
+  if(pending.deleted){delete syncMeta.pending[id];if(record)applyRemote(record);toast('Project changed on another device. Deletion cancelled.');return;}
+  const wasCurrent=currentId===id;const local=projects[id];let copyId=null;
+  if(local){copyId=uid();const copy=clean(local);copy.name=(copy.name||'Untitled')+' (conflict copy)';copy.updatedAt=Date.now();projects[copyId]=copy;queueChange(copyId);}
+  delete syncMeta.pending[id];
+  if(record)applyRemote(record);else{delete projects[id];delete syncMeta.revisions[id];}
+  if(copyId&&wasCurrent)currentId=copyId;
+  toast('Another device changed this project. Your edits were kept in a separate copy.');
+}
+async function syncShared(){
+  if(storageFailed)return;
+  if(syncing){syncAgain=true;return;}
+  syncing=true;let changed=false,failed=false;
+  try{
+    const response=await sharedRequest('/api/projects');if(!response.ok)throw Error('Shared projects are unavailable');
+    const data=await response.json();if(!Array.isArray(data.records))throw Error('Invalid shared response');
+    for(const record of data.records){
+      const pending=syncMeta.pending[record.id];
+      if(pending){
+        if(!pending.deleted&&!record.deleted&&sameProject(projects[record.id],record.project)){
+          syncMeta.revisions[record.id]=record.revision;delete syncMeta.pending[record.id];
+        }
+        continue;
+      }
+      if((syncMeta.revisions[record.id]||0)!==record.revision||(!record.deleted&&!projects[record.id])){
+        if(currentId===record.id&&inputFocused())continue;
+        applyRemote(record);changed=true;
+      }
+    }
+    const firstLoad=!loaded;loaded=true;
+    for(const id of Object.keys(syncMeta.pending)){
+      const pending=syncMeta.pending[id];if(!pending)continue;
+      const seq=pending.seq,deleted=pending.deleted,project=deleted||!projects[id]?null:clean(projects[id]);
+      if(!deleted&&!project){delete syncMeta.pending[id];continue;}
+      let token=await editToken();
+      const send=()=>sharedRequest('/api/projects/'+encodeURIComponent(id),{method:deleted?'DELETE':'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({baseRevision:syncMeta.revisions[id]||0,project})});
+      let result=await send();
+      if(result.status===401){syncMeta.token='';token=await editToken();result=await send();}
+      const payload=await result.json();
+      if(result.status===409){keepConflict(id,payload.record);changed=true;syncAgain=true;continue;}
+      if(!result.ok)throw Error(payload.error||'Shared save failed');
+      const record=payload.record;syncMeta.revisions[id]=record.revision;
+      if(syncMeta.pending[id]?.seq===seq){delete syncMeta.pending[id];if(!deleted&&projects[id])projects[id].updatedAt=record.updatedAt;}
+      else syncAgain=true;
+      saveSync();
+    }
+    const localOk=lsWrite(),metaOk=saveSync();
+    if(localOk&&metaOk)setStatus(Object.keys(syncMeta.pending).length?'busy':'',Object.keys(syncMeta.pending).length?'Saved locally — syncing…':'Shared projects — synced');
+    if((changed||firstLoad)&&!inputFocused())render();else if(changed)refreshAll();
+  }catch(e){failed=true;setStatus('local',navigator.onLine?'Not synced — changes saved on this device':'Offline — saved locally; waiting to sync');console.error('Shared sync:',e);lsWrite();saveSync();}
+  finally{syncing=false;if(syncAgain&&!failed){syncAgain=false;scheduleSync(250);}}
+}
+function initStore(){
+  projects=lsRead();
+  try{const saved=JSON.parse(localStorage.getItem(SYNC_KEY)||'null');if(saved&&saved.revisions&&saved.pending)syncMeta={...syncMeta,...saved};}catch(e){/* Recover local projects; reconcile them without overwriting remote records. */}
+  if(storageFailed){setStatus('local','Saved data could not be read. Shared sync is paused.');render();return;}
+  for(const id of Object.keys(projects))if(!syncMeta.revisions[id]&&!syncMeta.pending[id])queueChange(id);
+  setStatus('busy','Connecting to shared projects…');render();scheduleSync(0);
+  setInterval(()=>{if(document.visibilityState!=='hidden')syncShared();},5000);
+  window.addEventListener('online',()=>scheduleSync(0));window.addEventListener('focus',()=>scheduleSync(0));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden')scheduleSync(0);});
+}
 
 /* ---------- containers (unit types / common-area groups) ---------- */
 function ctrList(p,t){return p[CTR[t]];}
@@ -404,7 +485,7 @@ function renderHome(){
       <div><span class="big">${fmt0(c.grand.tot)}</span> <span class="meta">sheets</span></div>
       <div class="row"><button class="btn primary sm" data-open="${id}">Open</button><button class="btn sm" data-dupp="${id}">Duplicate</button><button class="btn sm danger" data-delp="${id}">Delete</button></div>
     </div>`;}).join('')}</div>`
-  :!loaded?`<div class="empty"><p><b>Loading projects…</b></p></div>`:`<div class="empty"><p><b>No projects yet.</b></p><p>Tap “New project” to start a takeoff. It saves automatically as you type.</p></div>`}`;
+  :!loaded?`<div class="empty"><p><b>Loading projects…</b></p></div>`:`<div class="empty"><p><b>No projects yet.</b></p><p>Tap “New project” to start a shared takeoff. Projects save to the shared online workspace as you type.</p></div>`}`;
 }
 function projectHTML(p){
   const A=p.assume;
