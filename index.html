@@ -73,6 +73,8 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .room{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px}
 .room-head{display:grid;grid-template-columns:minmax(0,1fr) 92px auto auto;gap:8px;align-items:end}
 .room-head .rname{font-weight:600}
+.room-head{grid-template-columns:minmax(0,1fr) 92px auto}.room-head .seg{grid-column:1/-1;grid-row:2;width:100%;height:auto;min-height:46px;display:flex;flex-wrap:wrap}.room-head .seg button{flex:1;min-height:46px;padding:8px 10px}.room-head .racts{grid-column:3;grid-row:1}
+@media(max-width:640px){.room-head .racts{grid-column:1/-1;grid-row:3;justify-content:flex-end}.room-head .seg{grid-column:1/-1}}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;height:46px}
 .seg button{border:0;background:var(--surface2);padding:0 12px;font-weight:600;font-size:14px;color:var(--muted)}
 .seg button.on{background:var(--ink);color:var(--surface)}
@@ -152,7 +154,7 @@ td input{min-height:38px;padding:6px 8px;width:90px;text-align:right}
 
 @media (max-width:640px){
   .room-head{grid-template-columns:minmax(0,1fr) 80px}
-  .room-head .seg,.room-head .racts{grid-column:span 1}
+  .room-head .seg,.room-head .racts{grid-column:1/-1}
   .surfaces,.dims{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .bar .wrap{gap:12px}
   .kpi.main b{font-size:24px}
@@ -260,7 +262,7 @@ function lenTxt(n){
 }
 
 /* ---------- model ---------- */
-function newRoom(name=''){return{id:uid(),name,qty:'1',mode:'sf',walls:'',clg:'',mr:'',L:'',W:'',H:'',mrWalls:MR_HINT.test(name)};}
+function newRoom(name=''){return{id:uid(),name,qty:'1',mode:'sf',walls:'',clg:'',mr:'',wallsLF:'',mrLF:'',L:'',W:'',H:'',mrWalls:MR_HINT.test(name)};}
 const newUnitType=(name='Unit A',count='1')=>({id:uid(),name,count,rooms:[]});
 const newGroup=(name='Level 1')=>({id:uid(),name,rooms:[]});
 function newProject(){
@@ -283,8 +285,14 @@ function normalize(p){
   if(!Array.isArray(p.mats)||!p.mats.length)p.mats=DEF_MATS.map(m=>({...m}));
   return migrated;
 }
+// Decimal/summed linear feet, or a single feet/inches/metric measurement.
+const linearFeet=raw=>/[\'"’‘′”“″]/.test(String(raw||''))||/(?:mm|cm|m|ft|feet|in|inch|inches)\s*$/i.test(String(raw||''))?parseLen(raw):val(raw);
 function roomSF(r,A,hd){
   const q=val(r.qty);
+  if(r.mode==='lf'){
+    const H=parseLen(r.H)||parseLen(hd)||+A.h||0,wl=linearFeet(r.wallsLF),ml=linearFeet(r.mrLF);
+    return{q,w:wl*H,c:val(r.clg),m:ml*H,H,wl,ml};
+  }
   if(r.mode==='dim'){
     const L=parseLen(r.L),W=parseLen(r.W),H=parseLen(r.H)||parseLen(hd)||+A.h||0;
     const wallSF=2*(L+W)*H,clg=L*W;
@@ -400,7 +408,7 @@ function projectHTML(p){
     ${af('wall','Sheet size – Walls (ft²)',A.wall,'s-w')}${af('clg','Sheet size – Ceiling (ft²)',A.clg,'s-c')}${af('mr','Sheet size – MR (ft²)',A.mr,'s-m')}
     <label class="field"><span class="lbl">Waste %</span><input id="a-waste" data-a="waste" inputmode="decimal" value="${esc(Math.round((+A.waste||0)*1000)/10)}"></label>
     ${af('h','Default ceiling height (ft)',A.h,'')}
-  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12. Room height is editable in every room card in both ft² and Dimensions. Blank room heights use the unit / level default, then the project default. Height calculates wall area in Dimensions; ft² entries remain measured areas.</p></div>`;
+  </div><p class="note">Sheets = ROUNDUP(ft² ÷ sheet size × (1 + waste)). 54 ft² = 4×13.5 sheet; 48 ft² = 4×12. Room height is editable in every room card in both ft² and Dimensions. Blank room heights use the unit / level default, then the project default. Height calculates wall area in Linear ft and Dimensions; square-foot entries already include height.</p></div>`;
 }
 const pf=(k,l,v)=>`<label class="field"><span class="lbl">${l}</span><input id="p-${k}" data-p="${k}" value="${esc(v)}" enterkeyhint="next"></label>`;
 const af=(k,l,v,c)=>`<label class="field ${c?'surf '+c:''}"><span class="lbl">${l}</span><input id="a-${k}" data-a="${k}" inputmode="decimal" value="${esc(v)}"></label>`;
@@ -429,7 +437,7 @@ function sectionHTML(p,t){
   ${chipRow(t==='common'?'Shared spaces':'',CHIPS[t])}${t==='common'?chipRow('Amenities',CHIPS.amenities):''}
   <div class="rooms" id="rooms">${list.length?list.map(r=>roomHTML(r)).join(''):emptyRooms()}</div>
   <div class="add-row"><button class="btn primary" data-act="add">+ Add room</button></div>
-  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Room height is always visible above Walls, Ceiling and MR. Use Dimensions to calculate wall area from Length, Width and Height; ft² entries are already measured areas. With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
+  <p class="note">In ft² fields you can type sums: <span class="num">120+85+42</span> or <span class="num">12x9</span>. Dimensions accept <span class="num">12'6</span>, <span class="num">12' 6 1/2"</span>, <span class="num">12 6</span>, <span class="num">12.5</span> and metric from a laser meter like <span class="num">3.812m</span>. Select Linear ft (LF) for wall lengths × room height, Square ft (ft²) for already calculated areas, or Dimensions for a rectangular room. Linear and square-foot wall entries are kept separately when switching modes. Ceiling is always an area in ft². With a laser meter in keyboard mode, tap Length and shoot: Enter jumps to the next field.</p>`;
 }
 const chipRow=(label,list)=>`${label?`<div class="chip-lbl">${label}</div>`:''}<div class="chips">${list.map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>`;
 const emptyRooms=()=>`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`;
@@ -448,19 +456,20 @@ function roomHTML(r){
       <div class="surf s-m"><span class="lbl">MR ft²</span><b class="num" data-o="m">0</b><span class="calc" data-o="msx"></span></div>
     </div>`:`
     <div class="surfaces">
-      ${sfIn(r,'walls','Walls ft²','s-w','wsx')}${sfIn(r,'clg','Ceiling ft²','s-c','csx')}${sfIn(r,'mr','MR ft²','s-m','msx')}
+      ${r.mode==='lf'?sfIn(r,'wallsLF','Walls — linear ft (LF)','s-w','wsx'):sfIn(r,'walls','Walls — square ft (ft²)','s-w','wsx')}${sfIn(r,'clg','Ceiling — square ft (ft²)','s-c','csx')}${r.mode==='lf'?sfIn(r,'mrLF','MR — linear ft (LF)','s-m','msx'):sfIn(r,'mr','MR — square ft (ft²)','s-m','msx')}
     </div>`;
   return`<div class="room" data-id="${r.id}">
     <div class="room-head">
       <label class="field"><span class="lbl">Room</span><input class="rname" id="r-${r.id}-name" data-f="name" value="${esc(r.name)}" placeholder="Name" enterkeyhint="next"></label>
       <label class="field"><span class="lbl">Qty</span><input id="r-${r.id}-qty" data-f="qty" inputmode="decimal" value="${esc(r.qty)}" enterkeyhint="next"></label>
-      <div class="seg" role="group" aria-label="Entry mode"><button data-mode="sf" class="${r.mode!=='dim'?'on':''}">ft²</button><button data-mode="dim" class="${r.mode==='dim'?'on':''}">Dimensions</button></div>
+      <div class="seg" role="group" aria-label="Entry mode"><button data-mode="sf" class="${r.mode!=='dim'&&r.mode!=='lf'?'on':''}">Square ft (ft²)</button><button data-mode="lf" class="${r.mode==='lf'?'on':''}">Linear ft (LF)</button><button data-mode="dim" class="${r.mode==='dim'?'on':''}">Dimensions</button></div>
       <div class="racts"><button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button><button class="icon-btn" data-act="del" title="Delete" aria-label="Delete">✕</button></div>
     </div>
     <div class="room-height">
       <label class="field"><span class="lbl">Room height (ft)</span><input id="r-${r.id}-H" data-f="H" inputmode="decimal" placeholder="Default height" value="${esc(r.H)}" enterkeyhint="next" autocomplete="off" autocorrect="off" spellcheck="false"><span class="calc" data-o="Hx"></span></label>
       <div><div class="hq" role="group" aria-label="Quick room height">${[8,9,10,12].map(h=>`<button type="button" class="hq-b" data-hq="${h}">${h}'</button>`).join('')}</div><p class="note">Changes only this room. Clear to use the unit / level default.</p></div>
     </div>
+    <p class="note">${r.mode==='lf'?'Linear ft: enter total wall lengths. Walls and MR are multiplied by room height. Ceiling stays in square ft.':r.mode==='dim'?'Dimensions: Walls = 2 × (Length + Width) × Height. Ceiling = Length × Width.':'Square ft: enter finished wall and ceiling areas. Height is already included; it is not multiplied again.'}</p>
     ${body}
     <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
     <div class="room-save"><button class="btn" data-act="done">✓ Save room</button><button class="btn primary" data-act="donenext">Save &amp; add another</button></div>
@@ -490,13 +499,13 @@ function refreshAll(){
     const effectiveHeight=parseLen(r.H)||hdv||+A.h||0;
     const hInput=el.querySelector('[data-f="H"]');if(hInput)hInput.placeholder=lenTxt(hdv||+A.h);
     el.querySelectorAll('[data-hq]').forEach(x=>x.classList.toggle('on',effectiveHeight===+x.dataset.hq));
-    set('Hx',String(r.H||'').trim()?show(r.H)+' (this room only)':`Using ${lenTxt(effectiveHeight)} from ${hdv?loc.ctr.name||'unit / level':'project'}`);
-    set('h-summary',`Height ${lenTxt(effectiveHeight)}`);
+    set('Hx',r.mode==='sf'||!r.mode?'Not multiplied in square ft mode':String(r.H||'').trim()?show(r.H)+' (this room only)':`Using ${lenTxt(effectiveHeight)} from ${hdv?loc.ctr.name||'unit / level':'project'}`);
+    set('h-summary',r.mode==='sf'||!r.mode?'Square ft · height already included':`${r.mode==='lf'?'Linear ft':'Dimensions'} · Height ${lenTxt(effectiveHeight)}`);
     if(r.mode==='dim'){set('Lx',show(r.L));set('Wx',show(r.W));}
     const ex=(f,sf,sh)=>{const raw=r[f];return(r.mode!=='dim'&&isExpr(raw)?`= ${fmt(sf)} ft² · `:'')+(sf?`${sh} sheets`:'');};
-    set('wsx',r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
+    set('wsx',r.mode==='lf'?`${fmt(c.wl)} LF × ${fmt(c.H)} ft = ${fmt(c.w)} ft² · ${c.ws} sheets`:r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
     set('csx',r.mode==='dim'?(c.c?c.cs+' sheets':''):ex('clg',c.c,c.cs));
-    set('msx',r.mode==='dim'?(c.m?c.ms+' sheets':''):ex('mr',c.m,c.ms));
+    set('msx',r.mode==='lf'?`${fmt(c.ml)} LF × ${fmt(c.H)} ft = ${fmt(c.m)} ft² · ${c.ms} sheets`:r.mode==='dim'?(c.m?c.ms+' sheets':''):ex('mr',c.m,c.ms));
   });
   const t=projCalc(p);
   $('#k-tot').textContent=fmt0(t.grand.tot);$('#k-w').textContent=fmt0(t.sheets.w);$('#k-c').textContent=fmt0(t.sheets.c);$('#k-m').textContent=fmt0(t.sheets.m);
@@ -680,11 +689,12 @@ async function exportXlsx(){
     b.rooms.forEach((r,i)=>{
       const row=b.start+i,c=roomCalc(r,A,b.h);
       C('B'+row,r.name||null);C('C'+row,c.q);
-      C('D'+row,c.w||null);F('E'+row,`ROUNDUP(D${row}/$K$5*(1+$K$8),0)`,c.ws);
+      if(r.mode==='lf')F('D'+row,`${c.wl}*${c.H}`,c.w);else C('D'+row,c.w||null);F('E'+row,`ROUNDUP(D${row}/$K$5*(1+$K$8),0)`,c.ws);
       C('F'+row,c.c||null);F('G'+row,`ROUNDUP(F${row}/$K$6*(1+$K$8),0)`,c.cs);
-      C('H'+row,c.m||null);F('I'+row,`ROUNDUP(H${row}/$K$7*(1+$K$8),0)`,c.ms);
+      if(r.mode==='lf')F('H'+row,`${c.ml}*${c.H}`,c.m);else C('H'+row,c.m||null);F('I'+row,`ROUNDUP(H${row}/$K$7*(1+$K$8),0)`,c.ms);
       F('J'+row,`E${row}+G${row}+I${row}`,c.per);F('K'+row,`C${row}*J${row}`,c.tot);
-      if(r.mode==='dim')C('L'+row,`${lenTxt(c.L)} × ${lenTxt(c.W)} × h ${lenTxt(c.H)}${r.mrWalls?' (MR walls)':''}`);
+      if(r.mode==='lf')C('L'+row,`Linear ft: Walls ${r.wallsLF||0} LF; MR ${r.mrLF||0} LF × h ${lenTxt(c.H)}; Ceiling ${r.clg||0} ft²`);
+      else if(r.mode==='dim')C('L'+row,`${lenTxt(c.L)} × ${lenTxt(c.W)} × h ${lenTxt(c.H)}${r.mrWalls?' (MR walls)':''}`);
       else{const parts=[['W',r.walls],['C',r.clg],['MR',r.mr]].filter(([,v])=>isExpr(v)).map(([k,v])=>`${k}: ${v}`);if(parts.length)C('L'+row,parts.join('  '));}
       for(let cc=2;cc<=12;cc++){const cell=ws.getCell(row,cc);cell.border=box;if([3,4,6,8].includes(cc))cell.fill=inFill;if([4,6,8].includes(cc))cell.numFmt='#,##0.0';}
       ws.getCell('L'+row).font={color:{argb:'FF5A6775'},size:9};
