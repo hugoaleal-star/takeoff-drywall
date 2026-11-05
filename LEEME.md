@@ -26,3 +26,6 @@ View / edit areas permite introducir ajustes en ft² y cantidad propios del apar
 Material requests permite marcar apartamentos, seleccionar todos los registrados de un tipo o elegir cuartos específicos dentro de cada apartamento. Las plazas sin número no se solicitan automáticamente. Si todavía no hay registro, continúa disponible la selección manual anterior.
 
 Summary y el Excel completo incluyen los apartamentos numerados, sus ajustes y las plazas restantes sin asignar. El total no duplica las plantillas. El registro y los ajustes se guardan y sincronizan con el proyecto.
+
+## Tamaño de hoja por área común (v14)
+En Common areas, pulsa Edit en el área. Sheet sizes for this area permite elegir Walls, Ceiling y MR por separado. Project default sigue el proyecto. La selección se guarda y sincroniza con el área; cambia hojas, sin cambiar medidas ni desperdicio. Las solicitudes nuevas separan tamaños; las ya guardadas conservan su cálculo.

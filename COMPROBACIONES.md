@@ -21,3 +21,5 @@ Pendiente: impresión física y prueba de descarga/impresión en un iPad físico
 - Solicitudes de una unidad, áreas específicas y selección por tipo.
 - Proyección de cálculo idempotente para el Excel completo; se conserva el comportamiento de los proyectos sin registro.
 - Navegador y guardado real: 20 unidades, 3 registradas, total conservado de 140 hojas; ajuste solo del apartamento 103 eleva el total a 144.
+
+V14: comprobados tamaños por área, retorno al predeterminado, mezcla de tamaños en solicitudes, conservación de snapshots y exportación Excel con denominadores propios.

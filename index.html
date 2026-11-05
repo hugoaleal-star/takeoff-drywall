@@ -319,14 +319,17 @@ function roomSF(r,A,hd){
   }
   return{q,w:val(r.walls),c:ceilingCalc(r).area,m:val(r.mr)};
 }
+function sheetAssume(r,A){return {...A,...Object.fromEntries(['wall','clg','mr'].filter(k=>Number.isFinite(+r.sheetSizes?.[k])&&+r.sheetSizes[k]>0).map(k=>[k,+r.sheetSizes[k]]))};}
 function roomCalc(r,A,hd){
+  A=sheetAssume(r,A);
   const s=roomSF(r,A,hd),k=1+(+A.waste||0);
   const ws=ru(s.w/(+A.wall||1)*k),cs=ru(s.c/(+A.clg||1)*k),ms=ru(s.m/(+A.mr||1)*k);
   const per=ws+cs+ms;return{...s,ws,cs,ms,per,tot:s.q*per};
 }
 function secCalc(list,A,hd){
   const t={q:0,w:0,c:0,m:0,ws:0,cs:0,ms:0,per:0,tot:0};
-  list.forEach(r=>{const c=roomCalc(r,A,hd);t.q+=c.q;t.w+=c.q*c.w;t.c+=c.q*c.c;t.m+=c.q*c.m;t.ws+=c.q*c.ws;t.cs+=c.q*c.cs;t.ms+=c.q*c.ms;t.per+=c.q*c.per;t.tot+=c.tot;});
+  list.forEach(r=>{const c=roomCalc(r,A,hd);
+t.q+=c.q;t.w+=c.q*c.w;t.c+=c.q*c.c;t.m+=c.q*c.m;t.ws+=c.q*c.ws;t.cs+=c.q*c.cs;t.ms+=c.q*c.ms;t.per+=c.q*c.per;t.tot+=c.tot;});
   return t;
 }
 function projCalc(p){
@@ -500,9 +503,9 @@ function selectedRequest(p,d){
   const totals=projCalc(copy);totals.mats=totals.mats.filter((_,i)=>d.materials[i]!==false);
   if(!scope.length)errors.push('Select at least one unit or common area.');
   if(!surfaces.w&&!surfaces.c&&!surfaces.m)errors.push('Select Walls, Ceiling or MR.');
-  return{errors,scope,totals};
+  return{errors,scope,totals,sheetRows:sheetRows(totals,p.assume,surfaces)};
 }
-function requestReport(r){const t=r.totals;return `<article class="request-report"><h2>Material request — ${esc(r.name)}</h2><p><b>${esc(r.projectName)}</b><br>${esc(r.address)}<br>Date: ${esc(r.date)} · Reference: ${esc(r.id)}</p>${r.notes?`<p class="request-notes">${esc(r.notes)}</p>`:''}<h3>Selected scope</h3><div class="tbl"><table><thead><tr><th>Unit / Area</th><th>Quantity</th><th>Unit numbers</th><th>Rooms</th></tr></thead><tbody>${r.scope.map(s=>`<tr><td>${esc(s.name)}</td><td>${s.count}</td><td>${esc(s.labels||'—')}</td><td>${esc(s.rooms)}</td></tr>`).join('')}</tbody></table></div><p>Surfaces: ${['w','c','m'].filter(k=>r.surfaces[k]).map(k=>({w:'Walls',c:'Ceiling',m:'MR'})[k]).join(', ')} · Waste: ${fmt(r.assume.waste*100)}%</p><h3>Sheets to request</h3><div class="tbl"><table><thead><tr><th>Surface</th><th>Area ft²</th><th>Sheet size ft²</th><th>Sheets</th></tr></thead><tbody>${[['Walls','w','wall'],['Ceiling','c','clg'],['MR','m','mr']].filter(([,k])=>r.surfaces[k]).map(([label,k,size])=>`<tr><td>${label}</td><td>${fmt(t.grand[k])}</td><td>${fmt(r.assume[size])}</td><td>${fmt0(t.sheets[k])}</td></tr>`).join('')}<tr class="grand"><td colspan="3">TOTAL SHEETS</td><td>${fmt0(t.grand.tot)}</td></tr></tbody></table></div><h3>Other materials</h3><div class="tbl"><table><thead><tr><th>Material</th><th>Quantity (+ waste)</th><th>Pack size</th><th>Packs to order</th></tr></thead><tbody>${t.mats.map(m=>`<tr><td>${esc(m.name)}</td><td>${fmt0(m.qty)} ${esc(m.qtyUnit)}</td><td>${fmt(m.pack)} ${esc(m.packUnit)}</td><td>${fmt0(m.packs)}</td></tr>`).join('')||'<tr><td colspan="4">No additional materials selected.</td></tr>'}</tbody></table></div><p class="note">Saved snapshot. Only the selection above is included. Previous requests are not automatically subtracted. Project measurements and totals are unchanged.</p></article>`;}
+function requestReport(r){const t=r.totals;return `<article class="request-report"><h2>Material request — ${esc(r.name)}</h2><p><b>${esc(r.projectName)}</b><br>${esc(r.address)}<br>Date: ${esc(r.date)} · Reference: ${esc(r.id)}</p>${r.notes?`<p class="request-notes">${esc(r.notes)}</p>`:''}<h3>Selected scope</h3><div class="tbl"><table><thead><tr><th>Unit / Area</th><th>Quantity</th><th>Unit numbers</th><th>Rooms</th></tr></thead><tbody>${r.scope.map(s=>`<tr><td>${esc(s.name)}</td><td>${s.count}</td><td>${esc(s.labels||'—')}</td><td>${esc(s.rooms)}</td></tr>`).join('')}</tbody></table></div><p>Surfaces: ${['w','c','m'].filter(k=>r.surfaces[k]).map(k=>({w:'Walls',c:'Ceiling',m:'MR'})[k]).join(', ')} · Waste: ${fmt(r.assume.waste*100)}%</p><h3>Sheets to request</h3><div class="tbl"><table><thead><tr><th>Surface</th><th>Area ft²</th><th>Sheet size ft²</th><th>Sheets</th></tr></thead><tbody>${requestSheetRows(r).map(x=>`<tr><td>${x.label}</td><td>${fmt(x.area)}</td><td>${fmt(x.size)}</td><td>${fmt0(x.sheets)}</td></tr>`).join('')}<tr class="grand"><td colspan="3">TOTAL SHEETS</td><td>${fmt0(t.grand.tot)}</td></tr></tbody></table></div><h3>Other materials</h3><div class="tbl"><table><thead><tr><th>Material</th><th>Quantity (+ waste)</th><th>Pack size</th><th>Packs to order</th></tr></thead><tbody>${t.mats.map(m=>`<tr><td>${esc(m.name)}</td><td>${fmt0(m.qty)} ${esc(m.qtyUnit)}</td><td>${fmt(m.pack)} ${esc(m.packUnit)}</td><td>${fmt0(m.packs)}</td></tr>`).join('')||'<tr><td colspan="4">No additional materials selected.</td></tr>'}</tbody></table></div><p class="note">Saved snapshot. Only the selection above is included. Previous requests are not automatically subtracted. Project measurements and totals are unchanged.</p></article>`;}
 function requestSnapshot(p,d){const result=selectedRequest(p,d);if(result.errors.length)throw Error(result.errors[0]);if(!d.name.trim()||!d.date)throw Error('Enter a request name and date.');return JSON.parse(JSON.stringify({id:uid(),name:d.name.trim(),date:d.date,notes:d.notes,createdAt:Date.now(),projectName:p.name,address:p.address,assume:p.assume,surfaces:d.surfaces,selection:d,...result}));}
 function requestsHTML(p){const list=Array.isArray(p.requests)?p.requests:[],view=list.find(r=>r.id===requestViews[currentId]);
   const history=`<div class="request-history"><h3>Saved requests (${list.length})</h3>${list.length?list.slice().reverse().map(r=>`<button class="btn sm" data-request-view="${esc(r.id)}">${esc(r.date)} · ${esc(r.name)}</button>`).join(' '):'<p>No saved requests yet.</p>'}</div>`;
@@ -526,7 +529,7 @@ function requestInput(el,p){if(!Object.keys(el.dataset).some(k=>k.startsWith('rq
   if(el.dataset.rqm!==undefined)d.materials[+el.dataset.rqm]=el.checked;
   const preview=$('#request-preview');if(preview)preview.innerHTML=requestPreview(selectedRequest(p,d));return true;
 }
-async function requestExcel(r){if(!window.ExcelJS){toast('Excel generator unavailable. Reload online.');return;}try{const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Material request');ws.columns=[{width:48},{width:24},{width:36},{width:54}];ws.addRow(['MATERIAL REQUEST',r.name]);ws.addRow(['Project',r.projectName]);ws.addRow(['Address',r.address]);ws.addRow(['Date',r.date]);ws.addRow(['Reference',r.id]);ws.addRow(['Notes',r.notes]);ws.addRow([]);ws.addRow(['Unit / Area','Quantity','Unit numbers','Rooms']);r.scope.forEach(s=>ws.addRow([s.name,s.count,s.labels,s.rooms]));ws.addRow([]);ws.addRow(['Surface','Area ft²','Sheet size ft²','Sheets']);[['Walls','w','wall'],['Ceiling','c','clg'],['MR','m','mr']].filter(([,k])=>r.surfaces[k]).forEach(([l,k,size])=>ws.addRow([l,r.totals.grand[k],r.assume[size],r.totals.sheets[k]]));ws.addRow(['TOTAL SHEETS','','',r.totals.grand.tot]);ws.addRow([]);ws.addRow(['Material','Quantity (+ waste)','Pack size','Packs to order']);r.totals.mats.forEach(m=>ws.addRow([m.name,`${m.qty} ${m.qtyUnit}`,`${m.pack} ${m.packUnit}`,m.packs]));ws.addRow(['Saved snapshot. Previous requests are not automatically subtracted.']);ws.eachRow(row=>{row.alignment={wrapText:true,vertical:'top'};});ws.getRow(1).font={bold:true,size:16};ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};const buf=await wb.xlsx.writeBuffer(),url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const a=document.createElement('a');a.href=url;a.download=`Material request - ${r.name.replace(/[\\/:*?"<>|]/g,'-')}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Request Excel generated.');}catch(e){console.error(e);toast('Could not generate request Excel.');}}
+async function requestExcel(r){if(!window.ExcelJS){toast('Excel generator unavailable. Reload online.');return;}try{const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Material request');ws.columns=[{width:48},{width:24},{width:36},{width:54}];ws.addRow(['MATERIAL REQUEST',r.name]);ws.addRow(['Project',r.projectName]);ws.addRow(['Address',r.address]);ws.addRow(['Date',r.date]);ws.addRow(['Reference',r.id]);ws.addRow(['Notes',r.notes]);ws.addRow([]);ws.addRow(['Unit / Area','Quantity','Unit numbers','Rooms']);r.scope.forEach(s=>ws.addRow([s.name,s.count,s.labels,s.rooms]));ws.addRow([]);ws.addRow(['Surface','Area ft²','Sheet size ft²','Sheets']);requestSheetRows(r).forEach(x=>ws.addRow([x.label,x.area,x.size,x.sheets]));ws.addRow(['TOTAL SHEETS','','',r.totals.grand.tot]);ws.addRow([]);ws.addRow(['Material','Quantity (+ waste)','Pack size','Packs to order']);r.totals.mats.forEach(m=>ws.addRow([m.name,`${m.qty} ${m.qtyUnit}`,`${m.pack} ${m.packUnit}`,m.packs]));ws.addRow(['Saved snapshot. Previous requests are not automatically subtracted.']);ws.eachRow(row=>{row.alignment={wrapText:true,vertical:'top'};});ws.getRow(1).font={bold:true,size:16};ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};const buf=await wb.xlsx.writeBuffer(),url=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const a=document.createElement('a');a.href=url;a.download=`Material request - ${r.name.replace(/[\\/:*?"<>|]/g,'-')}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Request Excel generated.');}catch(e){console.error(e);toast('Could not generate request Excel.');}}
 async function requestClick(b,p){if(b.dataset.requestType||b.dataset.requestTypeClear){const d=requestDraft(p);d.registered=d.registered||{};const type=b.dataset.requestType||b.dataset.requestTypeClear;for(const e of registeredUnits(p).filter(e=>e.typeId===type)){const pick=d.registered[e.id]||(d.registered[e.id]={rooms:{}});pick.selected=!!b.dataset.requestType;}render();return true;}if(b.dataset.requestRemoveCommon){delete requestDraft(p).common[b.dataset.requestRemoveCommon];render();return true;}if(b.dataset.requestView){requestViews[currentId]=b.dataset.requestView;render();return true;}const act=b.dataset.requestAction;if(!act)return false;
   if(act==='new'){delete requestViews[currentId];delete requestDrafts[currentId];render();return true;}
   if(act==='save'){try{const r=requestSnapshot(p,requestDraft(p));if(!Array.isArray(p.requests))p.requests=[];p.requests.push(r);if(!touch()){p.requests.pop();toast('Could not save request. Keep this page open.');return true;}requestViews[currentId]=r.id;delete requestDrafts[currentId];render();toast('Request saved — syncing online.');}catch(e){toast(e.message);}return true;}
@@ -645,10 +648,14 @@ function roomHTML(r){
     <p class="note">${r.mode==='lf'?'Linear ft: enter total wall lengths. Walls and MR are multiplied by room height. Ceiling is calculated separately below from Length × Width or an entered area.':r.mode==='dim'?'Dimensions: Walls = 2 × (Length + Width) × Height. Choose the ceiling measurement below.':'Square ft: enter finished wall areas. Height is already included; it is not multiplied again.'}</p>
     ${body}
     ${ceilingHTML(r)}
+    ${tab==='common'?sheetSizesHTML(r,projects[currentId].assume):''}
     <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
     <div class="room-save"><button class="btn" data-act="done">✓ Save room</button><button class="btn primary" data-act="donenext">Save &amp; add another</button></div>
   </div>`;
 }
+function sheetSizesHTML(r,A){return `<section class="ceiling-panel" aria-label="Sheet sizes for this area"><div class="lbl">Sheet sizes for this area</div><p class="note">Choose a size for this area only. Project default follows the project setting.</p><div class="grid">${[['wall','Walls'],['clg','Ceiling'],['mr','MR']].map(([k,label])=>`<label class="field"><span class="lbl">${label} sheet size</span><select data-sheet-size="${k}" aria-label="${label} sheet size"><option value="" ${!r.sheetSizes?.[k]?'selected':''}>Project default (${fmt(A[k])} ft²)</option>${[32,40,48,54,56,64,...(r.sheetSizes?.[k]&&![32,40,48,54,56,64].includes(+r.sheetSizes[k])?[+r.sheetSizes[k]]:[])].map(n=>`<option value="${n}" ${+r.sheetSizes?.[k]===n?'selected':''}>${n} ft² — 4 × ${n/4} ft</option>`).join('')}</select></label>`).join('')}</div><p class="note" data-o="sheet-sizes"></p></section>`;}
+function requestSheetRows(r){if(r.sheetRows)return r.sheetRows;return [['Walls','w','wall'],['Ceiling','c','clg'],['MR','m','mr']].filter(([,k])=>r.surfaces[k]).map(([label,k,size])=>({label,area:r.totals.grand[k],size:r.assume[size],sheets:r.totals.sheets[k]}));}
+function sheetRows(t,A,surfaces){const rows=new Map();for(const block of [...t.units,...t.groups]){const ctr=block.u||block.g,n=block.u?block.n:1;for(const room of ctr.rooms){const c=roomCalc(room,A,ctr.h),sizes=sheetAssume(room,A);for(const [label,k,size,sh] of [['Walls','w','wall','ws'],['Ceiling','c','clg','cs'],['MR','m','mr','ms']]){if(!surfaces[k]||!c.q||!n||!c[k])continue;const id=k+':'+sizes[size],row=rows.get(id)||{label,area:0,size:sizes[size],sheets:0};row.area+=c[k]*c.q*n;row.sheets+=c[sh]*c.q*n;rows.set(id,row);}}}return [...rows.values()];}
 function ceilingHTML(r){
   const c=ceilingCalc(r);
   return`<section class="ceiling-panel" aria-label="Ceiling calculation">
@@ -681,8 +688,9 @@ function refreshAll(){
   document.querySelectorAll('.room').forEach(el=>{
     const loc=locate(el.dataset.id);if(!loc)return;
     const r=loc.list[loc.idx],hd=loc.ctr.h,hdv=parseLen(hd);
-    const c=roomCalc(r,A,hd);
+    const c=roomCalc(r,A,hd),sizes=sheetAssume(r,A);
     const set=(k,v)=>{const o=el.querySelector(`[data-o="${k}"]`);if(o)o.textContent=v;};
+    set('sheet-sizes',`Sheets: Walls ${sizes.wall} / Ceiling ${sizes.clg} / MR ${sizes.mr} ft²`);
     set('per',fmt0(c.per));set('tot',fmt0(c.tot));
     set('sum',[c.w&&`W ${fmt(c.w)}`,c.c&&`C ${fmt(c.c)}`,c.m&&`MR ${fmt(c.m)}`].filter(Boolean).join(' · ')+(c.w||c.c||c.m?' ft²':''));
     set('w',fmt(c.w));set('c',fmt(c.c));set('m',fmt(c.m));
@@ -697,7 +705,7 @@ function refreshAll(){
     set('wsx',r.mode==='lf'?`${fmt(c.wl)} LF × ${fmt(c.H)} ft = ${fmt(c.w)} ft² · ${c.ws} sheets`:r.mode==='dim'?(c.w?c.ws+' sheets':''):ex('walls',c.w,c.ws));
     const ceiling=ceilingCalc(r);
     set('ceiling-area',`${fmt(c.c)} ft²`);set('ceiling-sheets',`${fmt0(c.cs)} ceiling sheets`);
-    set('ceiling-formula',`${ceiling.mode==='area'?'Area entered directly':`${fmt(ceiling.L)} ft × ${fmt(ceiling.W)} ft`} = ${fmt(c.c)} ft². Sheets: round up ${fmt(c.c)} ÷ ${fmt(+A.clg||1)} × (1 + ${fmt((+A.waste||0)*100)}% waste).`);
+    set('ceiling-formula',`${ceiling.mode==='area'?'Area entered directly':`${fmt(ceiling.L)} ft × ${fmt(ceiling.W)} ft`} = ${fmt(c.c)} ft². Sheets: round up ${fmt(c.c)} ÷ ${fmt(+sizes.clg||1)} × (1 + ${fmt((+A.waste||0)*100)}% waste).`);
     set('msx',r.mode==='lf'?`${fmt(c.ml)} LF × ${fmt(c.H)} ft = ${fmt(c.m)} ft² · ${c.ms} sheets`:r.mode==='dim'?(c.m?c.ms+' sheets':''):ex('mr',c.m,c.ms));
   });
   const t=projCalc(p);
@@ -741,6 +749,7 @@ document.addEventListener('input',e=>{
   else if(el.dataset.a){p.assume[el.dataset.a]=el.dataset.a==='waste'?(val(el.value)/100):val(el.value);}
   else if(el.dataset.m){const[i,k]=el.dataset.m.split('.');p.mats[+i][k]=val(el.value);}
   else if(el.dataset.c){const cur=activeCtr(p,tab);if(!cur)return;cur[el.dataset.c]=el.value;if(tab==='units'&&el.dataset.c==='count'){const min=registeredUnits(p).filter(e=>e.typeId===cur.id).length;if(val(cur.count)<min){cur.count=String(min);el.value=cur.count;toast('Count cannot be less than the registered apartments.');}}$('#ctrBar').innerHTML=ctrBarHTML(p,tab);}
+  else if(el.dataset.sheetSize){const r=findRoom(el.closest('.room').dataset.id);r.sheetSizes=r.sheetSizes||{};if(el.value)r.sheetSizes[el.dataset.sheetSize]=+el.value;else delete r.sheetSizes[el.dataset.sheetSize];}
   else if(el.dataset.f){const room=el.closest('.room');const r=findRoom(room.dataset.id);r[el.dataset.f]=el.type==='checkbox'?el.checked:el.value;}
   else return;
   refreshAll();touch();
@@ -875,7 +884,7 @@ async function exportXlsx(){
       C('B'+row,'Common Areas – '+b.name);C('C'+row,'N/A');
       F('D'+row,`D${b.sub}`,s.w);F('E'+row,`F${b.sub}`,s.c);F('F'+row,`H${b.sub}`,s.m);F('G'+row,`K${b.sub}`,s.tot);
     }
-    F('H'+row,sz,szR);
+    if(b.rooms.some(r=>Object.values(r.sheetSizes||{}).some(v=>+v>0)))C('H'+row,'Area-specific sizes: see room details');else F('H'+row,sz,szR);
   });
   const last=grand-1;
   C('B'+grand,'GRAND TOTAL');
@@ -891,11 +900,12 @@ async function exportXlsx(){
     title(b.title,(b.kind==='unit'?`${b.name} — measurements per ONE unit (× ${fmt(b.count)} units)`:`Common Areas — ${b.name}`)+hTxt);
     header(b.hdr,roomHdr);
     b.rooms.forEach((r,i)=>{
-      const row=b.start+i,c=roomCalc(r,A,b.h);
+      const row=b.start+i,c=roomCalc(r,A,b.h),sizes=sheetAssume(r,A);
+      const denom=(k,cell)=>+r.sheetSizes?.[k]>0?String(sizes[k]):cell;
       C('B'+row,r.name||null);C('C'+row,c.q);
-      if(r.mode==='lf')F('D'+row,`${c.wl}*${c.H}`,c.w);else C('D'+row,c.w||null);F('E'+row,`ROUNDUP(D${row}/$K$5*(1+$K$8),0)`,c.ws);
-      const ceiling=ceilingCalc(r);if(ceiling.mode==='area')C('F'+row,c.c||null);else F('F'+row,`${ceiling.L}*${ceiling.W}`,c.c);F('G'+row,`ROUNDUP(F${row}/$K$6*(1+$K$8),0)`,c.cs);
-      if(r.mode==='lf')F('H'+row,`${c.ml}*${c.H}`,c.m);else C('H'+row,c.m||null);F('I'+row,`ROUNDUP(H${row}/$K$7*(1+$K$8),0)`,c.ms);
+      if(r.mode==='lf')F('D'+row,`${c.wl}*${c.H}`,c.w);else C('D'+row,c.w||null);F('E'+row,`ROUNDUP(D${row}/${denom('wall','$K$5')}*(1+$K$8),0)`,c.ws);
+      const ceiling=ceilingCalc(r);if(ceiling.mode==='area')C('F'+row,c.c||null);else F('F'+row,`${ceiling.L}*${ceiling.W}`,c.c);F('G'+row,`ROUNDUP(F${row}/${denom('clg','$K$6')}*(1+$K$8),0)`,c.cs);
+      if(r.mode==='lf')F('H'+row,`${c.ml}*${c.H}`,c.m);else C('H'+row,c.m||null);F('I'+row,`ROUNDUP(H${row}/${denom('mr','$K$7')}*(1+$K$8),0)`,c.ms);
       F('J'+row,`E${row}+G${row}+I${row}`,c.per);F('K'+row,`C${row}*J${row}`,c.tot);
       if(r.mode==='lf')C('L'+row,`Linear ft: Walls ${r.wallsLF||0} LF; MR ${r.mrLF||0} LF × h ${lenTxt(c.H)}`);
       else if(r.mode==='dim')C('L'+row,`${lenTxt(c.L)} × ${lenTxt(c.W)} × h ${lenTxt(c.H)}${r.mrWalls?' (MR walls)':''}`);
@@ -903,7 +913,7 @@ async function exportXlsx(){
       const ceilingNote=ceiling.mode==='area'?`Ceiling area: ${fmt(ceiling.area)} ft²`:`Ceiling: ${lenTxt(ceiling.L)} × ${lenTxt(ceiling.W)} = ${fmt(ceiling.area)} ft²`;
       for(let cc=2;cc<=12;cc++){const cell=ws.getCell(row,cc);cell.border=box;if([3,4,6,8].includes(cc))cell.fill=inFill;if([4,6,8].includes(cc))cell.numFmt='#,##0.0';}
       ws.getCell('L'+row).font={color:{argb:'FF5A6775'},size:9};
-      C('L'+row,[ws.getCell('L'+row).value,ceilingNote].filter(Boolean).join(' | '));
+      C('L'+row,[ws.getCell('L'+row).value,ceilingNote,`Sheet sizes ft²: Walls ${sizes.wall} / Ceiling ${sizes.clg} / MR ${sizes.mr}`].filter(Boolean).join(' | '));
     });
     const s=secCalc(b.rooms,A,b.h),st=b.start,en=b.end,sub=b.sub;
     C('B'+sub,'SUB-TOTAL');F('C'+sub,`SUM(C${st}:C${en})`,s.q);
