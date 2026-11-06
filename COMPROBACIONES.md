@@ -23,3 +23,5 @@ Pendiente: impresión física y prueba de descarga/impresión en un iPad físico
 - Navegador y guardado real: 20 unidades, 3 registradas, total conservado de 140 hojas; ajuste solo del apartamento 103 eleva el total a 144.
 
 V14: comprobados tamaños por área, retorno al predeterminado, mezcla de tamaños en solicitudes, conservación de snapshots y exportación Excel con denominadores propios.
+
+Versión 15: cada habitación de las unidades permite elegir hojas independientes para Walls, Ceiling y MR, igual que las áreas comunes.

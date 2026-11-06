@@ -648,7 +648,7 @@ function roomHTML(r){
     <p class="note">${r.mode==='lf'?'Linear ft: enter total wall lengths. Walls and MR are multiplied by room height. Ceiling is calculated separately below from Length × Width or an entered area.':r.mode==='dim'?'Dimensions: Walls = 2 × (Length + Width) × Height. Choose the ceiling measurement below.':'Square ft: enter finished wall areas. Height is already included; it is not multiplied again.'}</p>
     ${body}
     ${ceilingHTML(r)}
-    ${tab==='common'?sheetSizesHTML(r,projects[currentId].assume):''}
+    ${sheetSizesHTML(r,projects[currentId].assume)}
     <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
     <div class="room-save"><button class="btn" data-act="done">✓ Save room</button><button class="btn primary" data-act="donenext">Save &amp; add another</button></div>
   </div>`;
