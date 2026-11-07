@@ -116,7 +116,7 @@ h2{font-family:var(--f-display);font-weight:700;font-size:26px;margin:0;text-wra
 .pill.on .num{color:inherit;opacity:.8}
 .pill.add{border-style:dashed;background:transparent;color:var(--accent)}
 .ctr-edit{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end;margin-bottom:14px}
-.ctr-acts{display:flex;gap:8px;flex-wrap:wrap}
+.ctr-acts{grid-column:1/-1;display:flex;gap:8px;flex-wrap:nowrap;align-items:center;min-width:0;overflow-x:auto;padding:3px 2px 5px;scrollbar-width:thin}.ctr-acts .btn{flex:0 0 auto;white-space:nowrap}.ctr-edit.common-parent{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ctr-tot{grid-column:1/-1;font-size:14px;color:var(--muted)}
 .ctr-tot b{color:var(--accent);font-size:18px}
 @media (max-width:640px){.ctr-edit{grid-template-columns:minmax(0,1fr)}}
@@ -642,11 +642,11 @@ function sectionHTML(p,t){
   if(!cur)return head+`<div class="empty">${isU?'No unit types yet. Tap “+ Unit type” to add Unit A.':'No common areas yet. Tap “+ Common area” to add one.'}</div>`;
   const list=cur.rooms;
   return head+`
-  <div class="panel ctr-edit">
+  <div class="panel ctr-edit ${isU?'unit-parent':'common-parent'}">
     <label class="field"><span class="lbl">${isU?'Unit type name':'Common area name'}</span><input id="c-name" data-c="name" value="${esc(cur.name)}" placeholder="${isU?'Unit A, 1BR, Type B2…':'Clubhouse, Pool building, Garage…'}" enterkeyhint="next"></label>
     <label class="field"><span class="lbl">Default room height (ft)</span><input id="c-h" data-c="h" inputmode="decimal" placeholder="Project: ${esc(lenTxt(+p.assume.h))}" value="${esc(cur.h||'')}" autocomplete="off"></label>
     ${isU?`<label class="field"><span class="lbl"># of units of this type</span><input id="c-count" data-c="count" inputmode="decimal" value="${esc(cur.count)}" enterkeyhint="next"></label>`:''}
-    <div class="ctr-acts"><button class="btn primary sm" data-act="area-report">Area report / Print</button><button class="btn sm" data-act="dupctr">Duplicate ${isU?'type':'common area'}</button><button class="btn sm danger" data-act="delctr">Delete ${isU?'type':'common area'}</button></div>
+    <div class="ctr-acts"><button class="btn primary sm" data-act="area-report">Area report / Print</button><button class="btn sm" data-act="dupctr">Duplicate</button><button class="btn sm danger" data-act="delctr">Delete</button></div>
     <div class="ctr-tot">Sheets ${isU?'per unit':''} <b class="num" id="ctrPer">0</b>${isU?` · All units <b class="num" id="ctrAll">0</b>`:''}</div>
   </div>
   ${isU?'':'<details class="common-quick-add"><summary>Add a subarea by name</summary>'}<div class="lbl">${isU?'Quick add to':'Add a subarea to'} ${esc(cur.name||'this '+(isU?'type':'group'))}</div>
