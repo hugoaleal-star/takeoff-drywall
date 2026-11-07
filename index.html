@@ -747,7 +747,7 @@ function refreshAll(){
     const row=(name,n,x)=>`<tr><td>${esc(name)}</td><td class="num">${n}</td><td class="num">${fmt(x.w)}</td><td class="num">${fmt(x.c)}</td><td class="num">${fmt(x.m)}</td><td class="num">${fmt0(x.tot)}</td></tr>`;
     sT.innerHTML=`<thead><tr><th>Area</th><th># of Units</th><th>ft² Walls</th><th>ft² Ceiling</th><th>ft² MR</th><th>Total Sheets</th></tr></thead><tbody>
       ${t.units.map(x=>row(x.u.name||'Unit type',fmt(x.n),x)).join('')}
-      ${t.groups.map(x=>row('Common Areas – '+(x.g.name||'Group'),'N/A',x)).join('')}
+      ${t.groups.filter(x=>x.g.rooms.length).map(x=>row('Common Areas – '+(x.g.name||'Group'),'N/A',x)).join('')}
       <tr class="grand"><td>GRAND TOTAL</td><td class="num">${fmt(t.nUnits)}</td><td class="num">${fmt(t.grand.w)}</td><td class="num">${fmt(t.grand.c)}</td><td class="num">${fmt(t.grand.m)}</td><td class="num">${fmt0(t.grand.tot)}</td></tr></tbody>`;
   }
   const mT=$('#matT');
@@ -898,7 +898,7 @@ async function exportXlsx(){
   // Row plan
   const blocks=[
     ...p.unitTypes.map(u=>({kind:'unit',name:u.name||'Unit type',count:val(u.count),h:u.h,rooms:u.rooms.length?u.rooms:[newRoom('')]})),
-    ...p.groups.map(g=>({kind:'group',name:g.name||'Group',h:g.h,rooms:g.rooms.length?g.rooms:[newRoom('')]}))
+    ...p.groups.filter(g=>g.rooms.length).map(g=>({kind:'group',name:g.name||'Group',h:g.h,rooms:g.rooms.length?g.rooms:[newRoom('')]}))
   ];
   const sumStart=13,grand=sumStart+blocks.length;
   let r0=grand+2;
