@@ -47,6 +47,7 @@ input:focus{border-color:var(--accent)}
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
 .top .wrap{display:flex;align-items:center;gap:12px;padding-block:10px;flex-wrap:wrap}
 .brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.01em;display:flex;align-items:center;gap:10px;min-width:0}
+.brand .company-logo{display:block;width:150px;height:auto;max-height:60px;object-fit:contain;flex:none}@media(max-width:640px){.brand .company-logo{width:112px;max-height:45px}.brand{max-width:100%}}
 .brand .mark{width:26px;height:26px;border-radius:5px;background:linear-gradient(135deg,var(--wall) 0 33%,var(--clg) 33% 66%,var(--mr) 66%);flex:none}
 .brand span.pname{color:var(--muted);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .spacer{flex:1}
@@ -183,7 +184,7 @@ td input{min-height:38px;padding:6px 8px;width:90px;text-align:right}
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><div class="mark" aria-hidden="true"></div>Takeoff <span class="pname" id="pname"></span></div>
+    <div class="brand"><img class="company-logo" src="./lackey-logo.png" alt="Lackey Painting, Inc." width="150" height="59">Takeoff <span class="pname" id="pname"></span></div>
     <div class="spacer"></div>
     <div class="status" id="status"><i></i><span>Loading…</span></div>
     <button class="btn ghost sm" id="backBtn" hidden>Projects</button>
