@@ -1,9 +1,7 @@
-# Versión 17 — partidas de paredes
+# Versión 18 — vista sencilla con botones
 
-En cada habitación, pulse Edit y después “Separate walls into independent entries”. Se conservan las medidas, cantidades manuales y tamaños existentes al separar Walls y MR. Use “+ Add wall entry” para añadir partidas.
+La habitación muestra la medida, el botón Height y el botón Sheet de cada superficie. Las opciones avanzadas están ocultas. Height abre alturas rápidas 8, 9, 10, 12 y altura personalizada. Sheet abre tamaño y espesor. Las habitaciones nuevas usan pies lineales por defecto y siguen la altura del proyecto o unidad hasta personalizarla.
 
-Cada partida permite material Standard o MR, altura propia, tamaño de hoja, espesor, notas y método LF, ft² o cantidad final de hojas. La altura solo multiplica LF. Las hojas manuales no reciben desperdicio adicional. El techo conserva su entrada independiente.
+Los registros existentes conservan su método, cantidades y resultados. La vista no modifica datos por sí sola. La edición conserva las partidas independientes. Los registros manuales siguen sin recalcular ni añadir desperdicio.
 
-Las solicitudes y la pestaña “Sheet breakdown” del Excel separan material, tamaño y espesor. Los datos existentes no se convierten hasta pulsar el botón.
-
-Publicar index.html y sw.js. Caché: takeoff-drywall-v17. Abrir ?v=17; cerrar y volver a abrir las ventanas de la aplicación para activar la nueva caché. No borrar los datos del navegador.
+Publicar index.html y sw.js. Caché takeoff-drywall-v18. Abrir ?v=18.
