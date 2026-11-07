@@ -603,10 +603,9 @@ function renderHome(){
 }
 function projectHTML(p){
   const A=p.assume;
-  return`<div class="sec-head"><div><h2>Project info</h2><p>Takeoff header and calculation assumptions.</p></div></div>
+  return`<div class="sec-head"><div><h2>Project info</h2><p>Project name and calculation assumptions.</p></div></div>
   <div class="panel"><div class="grid g2">
-    ${pf('name','Project',p.name)}${pf('address','Address',p.address)}${pf('levels','Levels / Scope',p.levels)}${pf('drawings','Drawings / Scale',p.drawings)}
-    <label class="field"><span class="lbl">Date</span><input type="date" id="p-date" data-p="date" value="${esc(p.date)}"></label>
+    ${pf('name','Project name',p.name)}
   </div></div>
   <div class="panel"><div class="lbl" style="margin-bottom:10px">Assumptions</div><div class="grid g5">
     ${af('wall','Sheet size – Walls (ft²)',A.wall,'s-w')}${af('clg','Sheet size – Ceiling (ft²)',A.clg,'s-c')}${af('mr','Sheet size – MR (ft²)',A.mr,'s-m')}
