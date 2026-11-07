@@ -306,7 +306,7 @@ function ceilingCalc(r){
   const L=parseLen(mode==='room'?r.L:r.clgL),W=parseLen(mode==='room'?r.W:r.clgW);
   return{mode,L,W,area:L*W};
 }
-function roomSF(r,A,hd){
+function legacyRoomSF(r,A,hd){
   if(r.mode==='sheets')return {q:val(r.qty),w:0,c:0,m:0};
   const q=val(r.qty);
   if(r.mode==='lf'){
@@ -320,8 +320,17 @@ function roomSF(r,A,hd){
   }
   return{q,w:val(r.walls),c:ceilingCalc(r).area,m:val(r.mr)};
 }
+function wallItemCalc(item,r,A,hd){
+ const kind=item.kind==='mr'?'m':'w',size=+item.size||sheetAssume(r,A)[kind==='m'?'mr':'wall'],height=parseLen(item.height)||parseLen(r.H)||parseLen(hd)||+A.h||0;
+ const area=item.mode==='sheets'?0:item.mode==='lf'?linearFeet(item.value)*height:val(item.value);
+ const sheets=item.mode==='sheets'?val(item.value):ru(area/size*(1+(+A.waste||0)));
+ return{kind,size,height,area,sheets};
+}
+function roomSF(r,A,hd){const base=legacyRoomSF(r,A,hd);if(!Array.isArray(r.wallItems))return base;const items=r.wallItems.map(x=>wallItemCalc(x,r,A,hd));return{...base,w:items.filter(x=>x.kind==='w').reduce((n,x)=>n+x.area,0),m:items.filter(x=>x.kind==='m').reduce((n,x)=>n+x.area,0)};}
+function roomCalc(r,A,hd){const base=legacyRoomCalc(r,A,hd);if(!Array.isArray(r.wallItems))return base;const sf=roomSF(r,A,hd),items=r.wallItems.map(x=>wallItemCalc(x,r,A,hd)),ws=items.filter(x=>x.kind==='w').reduce((n,x)=>n+x.sheets,0),ms=items.filter(x=>x.kind==='m').reduce((n,x)=>n+x.sheets,0),per=ws+ms+base.cs;return{...base,...sf,ws,ms,per,tot:sf.q*per};}
+function splitRoomWalls(r,A,hd){if(Array.isArray(r.wallItems))return;const sizes=sheetAssume(r,A),sf=legacyRoomSF(r,A,hd);r.wallItems=['w','m'].map(kind=>({id:uid(),name:kind==='m'?'MR walls':'Standard walls',kind:kind==='m'?'mr':'wall',mode:r.mode==='sheets'?'sheets':r.mode==='lf'?'lf':'sf',value:r.mode==='sheets'?String(r.manualSheets?.[kind]??''):r.mode==='lf'?String(kind==='m'?r.mrLF||'':r.wallsLF||''):String(kind==='m'?sf.m:sf.w),height:r.H||'',size:String(sizes[kind==='m'?'mr':'wall']),thickness:'',notes:''}));}
 function sheetAssume(r,A){return {...A,...Object.fromEntries(['wall','clg','mr'].filter(k=>Number.isFinite(+r.sheetSizes?.[k])&&+r.sheetSizes[k]>0).map(k=>[k,+r.sheetSizes[k]]))};}
-function roomCalc(r,A,hd){
+function legacyRoomCalc(r,A,hd){
   if(r.mode==='sheets'){const ws=val(r.manualSheets?.w),cs=val(r.manualSheets?.c),ms=val(r.manualSheets?.m),per=ws+cs+ms;return{q:val(r.qty),w:0,c:0,m:0,ws,cs,ms,per,tot:val(r.qty)*per};}
   A=sheetAssume(r,A);
   const s=roomSF(r,A,hd),k=1+(+A.waste||0);
@@ -486,7 +495,7 @@ function unitLabels(raw){return String(raw||'').split(/[,;\n]+/).map(x=>x.trim()
 function selectedRequest(p,d){
   const errors=[],seen=new Set(),scope=[],copy=JSON.parse(JSON.stringify(p));copy.unitTypes=[];copy.groups=[];delete copy.requests;delete copy.unitRegister;
   const surfaces=d.surfaces||{};
-  function filteredRoom(r,qty){const x={...r,qty:String(qty)};if(r.mode==='sheets'){x.manualSheets=Object.fromEntries(['w','c','m'].map(k=>[k,surfaces[k]?val(r.manualSheets?.[k]):0]));return x;}const s=roomSF(r,p.assume); // Convert selected surfaces to explicit areas without changing the source room.
+  function filteredRoom(r,qty){const x={...r,qty:String(qty)};if(Array.isArray(r.wallItems))x.wallItems=r.wallItems.filter(i=>surfaces[i.kind==='mr'?'m':'w']).map(i=>({...i}));if(r.mode==='sheets'){x.manualSheets=Object.fromEntries(['w','c','m'].map(k=>[k,surfaces[k]?val(r.manualSheets?.[k]):0]));return x;}const s=roomSF(r,p.assume); // Convert selected surfaces to explicit areas without changing the source room.
     x.mode='sf';x.walls=surfaces.w?String(s.w):'0';x.mr=surfaces.m?String(s.m):'0';x.ceilingMode='area';x.clg=surfaces.c?String(s.c):'0';return x;}
   if(registeredUnits(p).length){for(const entry of registeredUnits(p)){const pick=d.registered?.[entry.id];if(!pick?.selected)continue;const unit=resolvedUnit(p,entry);if(!unit){errors.push(`Unit ${entry.number}: missing type.`);continue;}const rooms=unit.rooms.filter(r=>!pick.rooms||pick.rooms[r.id]!==false).map(r=>filteredRoom(r,val(r.qty)));if(!rooms.length){errors.push(`${unit.name}: select at least one area.`);continue;}copy.unitTypes.push({...unit,rooms});scope.push({kind:'Unit',name:unit.name,count:1,labels:entry.number,rooms:rooms.map(r=>r.name).join(', ')});}}
   else {
@@ -621,9 +630,11 @@ function sectionHTML(p,t){
 const chipRow=(label,list)=>`${label?`<div class="chip-lbl">${label}</div>`:''}<div class="chips">${list.map(n=>`<button class="chip" data-chip="${esc(n)}"><b>+</b>${esc(n)}</button>`).join('')}</div>`;
 const emptyRooms=()=>`<div class="empty">No rooms yet. Tap a name above or “Add room”.</div>`;
 const compactHTML=r=>`<div class="room done" data-id="${r.id}"><button class="room-sum" data-act="edit" aria-label="Edit ${esc(r.name)}"><span class="ok" aria-hidden="true">✓</span><span class="rn">${esc(r.name||'Untitled')}</span><span class="q num">×${esc(r.qty)}</span><span class="calc" data-o="sum"></span><span class="calc" data-o="h-summary"></span><span class="tot">Total sheets <b data-o="tot">0</b></span><span class="ed">Edit</span></button></div>`;
-function manualRoomHTML(r){return `<div class="room" data-id="${r.id}"><div class="room-head"><label class="field"><span class="lbl">Room / area</span><input data-f="name" value="${esc(r.name)}"></label><label class="field"><span class="lbl">Qty</span><input data-f="qty" inputmode="numeric" value="${esc(r.qty)}"></label></div><h3>Manual sheet quantities — no recalculation</h3><p class="note">Final quantities from your notes. No area conversion or additional waste is applied. Blank quantities remain pending.</p><div class="grid">${[['w','Walls'],['c','Ceiling'],['m','MR']].map(([k,label])=>`<label class="field"><span class="lbl">${label} — final sheets</span><input data-manual-sheet="${k}" inputmode="numeric" value="${esc(r.manualSheets?.[k]??'')}"></label>`).join('')}</div><label class="field"><span class="lbl">Original notes / measurements</span><textarea data-f="manualNotes" rows="4">${esc(r.manualNotes||'')}</textarea></label><p class="note">${esc(r.materialLabel||'')}</p><div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span>Total sheets <b data-o="tot">0</b></span></div><div class="room-save"><button class="btn" data-act="done">✓ Save room</button></div></div>`;}
+function wallItemsRoomHTML(r){const p=projects[currentId],loc=locate(r.id);return `<div class="room" data-id="${r.id}"><label class="field"><span class="lbl">Room / area</span><input data-f="name" value="${esc(r.name)}"></label><label class="field"><span class="lbl">Qty</span><input data-f="qty" inputmode="numeric" value="${esc(r.qty)}"></label><h3>Independent wall entries</h3><p class="note">Each entry has its own height, sheet size and thickness. LF × height calculates area; ft² already includes height; final sheets are kept without extra waste. Blank height follows the room / unit / project.</p>${r.wallItems.map(i=>{const c=wallItemCalc(i,r,p.assume,loc?.ctr.h);return `<section class="ceiling-panel" data-wall-item="${i.id}"><div class="grid"><label class="field"><span class="lbl">Entry name</span><input data-wi="name" value="${esc(i.name)}"></label><label class="field"><span class="lbl">Wall material</span><select data-wi="kind"><option value="wall" ${i.kind!=='mr'?'selected':''}>Standard</option><option value="mr" ${i.kind==='mr'?'selected':''}>MR — moisture resistant</option></select></label><label class="field"><span class="lbl">Measurement method</span><select data-wi="mode">${[['lf','Linear ft × height'],['sf','Area — ft²'],['sheets','Final sheets — no recalculation']].map(([v,n])=>`<option value="${v}" ${i.mode===v?'selected':''}>${n}</option>`).join('')}</select></label><label class="field"><span class="lbl">${i.mode==='lf'?'Linear ft':i.mode==='sheets'?'Final sheets':'Area ft²'}</span><input data-wi="value" inputmode="decimal" value="${esc(i.value)}"></label><label class="field"><span class="lbl">Height (ft) — LF only</span><input data-wi="height" inputmode="decimal" value="${esc(i.height)}" placeholder="${esc(r.H||loc?.ctr.h||p.assume.h)}" ${i.mode!=='lf'?'disabled':''}></label><label class="field"><span class="lbl">Sheet size</span><select data-wi="size"><option value="">Project / room default</option>${[32,40,48,54,56,64,...(+i.size&&![32,40,48,54,56,64].includes(+i.size)?[+i.size]:[])].map(n=>`<option value="${n}" ${+i.size===n?'selected':''}>${n} ft²${n===54?' — 4½ × 12 ft':` — 4 × ${n/4} ft`}</option>`).join('')}</select></label><label class="field"><span class="lbl">Sheet thickness</span><select data-wi="thickness">${[['','Not specified'],['1/2','½ inch'],['5/8','⅝ inch'],['1/4','¼ inch'],['3/8','⅜ inch']].map(([v,n])=>`<option value="${v}" ${i.thickness===v?'selected':''}>${n}</option>`).join('')}</select></label></div><label class="field"><span class="lbl">Notes</span><input data-wi="notes" value="${esc(i.notes||'')}"></label><p class="note" data-wall-result="${i.id}">${fmt(c.area)} ft² · ${fmt0(c.sheets)} sheets</p><button class="btn" data-act="delwall" data-item-id="${i.id}">Remove entry</button></section>`;}).join('')}<button class="btn" data-act="addwall">+ Add wall entry</button>${r.mode==='sheets'?`<label class="field"><span class="lbl">Ceiling — final sheets (no recalculation)</span><input data-manual-sheet="c" value="${esc(r.manualSheets?.c??'')}" inputmode="numeric"></label>`:ceilingHTML(r)+`<label class="field"><span class="lbl">Ceiling sheet size</span><select data-sheet-size="clg"><option value="">Project default (${p.assume.clg} ft²)</option>${[32,40,48,54,56,64].map(n=>`<option value="${n}" ${+r.sheetSizes?.clg===n?'selected':''}>${n} ft²</option>`).join('')}</select></label>`}<label class="field"><span class="lbl">Original notes / measurements</span><textarea data-f="manualNotes">${esc(r.manualNotes||'')}</textarea></label><div class="room-foot">Sheets per room <b data-o="per">0</b> · Total sheets <b data-o="tot">0</b></div><div class="room-save"><button class="btn" data-act="done">✓ Save room</button></div></div>`;}
+function manualRoomHTML(r){return `<div class="room" data-id="${r.id}"><div class="room-head"><label class="field"><span class="lbl">Room / area</span><input data-f="name" value="${esc(r.name)}"></label><label class="field"><span class="lbl">Qty</span><input data-f="qty" inputmode="numeric" value="${esc(r.qty)}"></label></div><button class="btn" data-act="splitwalls">Separate walls into independent entries</button><h3>Manual sheet quantities — no recalculation</h3><p class="note">Final quantities from your notes. No area conversion or additional waste is applied. Blank quantities remain pending.</p><div class="grid">${[['w','Walls'],['c','Ceiling'],['m','MR']].map(([k,label])=>`<label class="field"><span class="lbl">${label} — final sheets</span><input data-manual-sheet="${k}" inputmode="numeric" value="${esc(r.manualSheets?.[k]??'')}"></label>`).join('')}</div><label class="field"><span class="lbl">Original notes / measurements</span><textarea data-f="manualNotes" rows="4">${esc(r.manualNotes||'')}</textarea></label><p class="note">${esc(r.materialLabel||'')}</p><div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span>Total sheets <b data-o="tot">0</b></span></div><div class="room-save"><button class="btn" data-act="done">✓ Save room</button></div></div>`;}
 function roomHTML(r){
   if(r.done)return compactHTML(r);
+  if(Array.isArray(r.wallItems))return wallItemsRoomHTML(r);
   if(r.mode==='sheets')return manualRoomHTML(r);
   const body=r.mode==='dim'?`
     <div class="dims">
@@ -652,6 +663,7 @@ function roomHTML(r){
     <p class="note">${r.mode==='lf'?'Linear ft: enter total wall lengths. Walls and MR are multiplied by room height. Ceiling is calculated separately below from Length × Width or an entered area.':r.mode==='dim'?'Dimensions: Walls = 2 × (Length + Width) × Height. Choose the ceiling measurement below.':'Square ft: enter finished wall areas. Height is already included; it is not multiplied again.'}</p>
     ${body}
     ${ceilingHTML(r)}
+    <button class="btn" data-act="splitwalls">Separate walls into independent entries</button>
     ${sheetSizesHTML(r,projects[currentId].assume)}
     <div class="room-foot"><span>Sheets per room <b data-o="per">0</b></span><span class="tot">Total sheets <b data-o="tot">0</b></span></div>
     <div class="room-save"><button class="btn" data-act="done">✓ Save room</button><button class="btn primary" data-act="donenext">Save &amp; add another</button></div>
@@ -659,7 +671,7 @@ function roomHTML(r){
 }
 function sheetSizesHTML(r,A){return `<section class="ceiling-panel" aria-label="Sheet sizes for this area"><div class="lbl">Sheet sizes for this area</div><p class="note">Choose a size for this area only. Project default follows the project setting.</p><div class="grid">${[['wall','Walls'],['clg','Ceiling'],['mr','MR']].map(([k,label])=>`<label class="field"><span class="lbl">${label} sheet size</span><select data-sheet-size="${k}" aria-label="${label} sheet size"><option value="" ${!r.sheetSizes?.[k]?'selected':''}>Project default (${fmt(A[k])} ft²)</option>${[32,40,48,54,56,64,...(r.sheetSizes?.[k]&&![32,40,48,54,56,64].includes(+r.sheetSizes[k])?[+r.sheetSizes[k]]:[])].map(n=>`<option value="${n}" ${+r.sheetSizes?.[k]===n?'selected':''}>${n} ft² — 4 × ${n/4} ft</option>`).join('')}</select></label>`).join('')}</div><p class="note" data-o="sheet-sizes"></p></section>`;}
 function requestSheetRows(r){if(r.sheetRows)return r.sheetRows;return [['Walls','w','wall'],['Ceiling','c','clg'],['MR','m','mr']].filter(([,k])=>r.surfaces[k]).map(([label,k,size])=>({label,area:r.totals.grand[k],size:r.assume[size],sheets:r.totals.sheets[k]}));}
-function sheetRows(t,A,surfaces){const rows=new Map();for(const block of [...t.units,...t.groups]){const ctr=block.u||block.g,n=block.u?block.n:1;for(const room of ctr.rooms){const c=roomCalc(room,A,ctr.h),sizes=sheetAssume(room,A);for(const [label,k,size,sh] of [['Walls','w','wall','ws'],['Ceiling','c','clg','cs'],['MR','m','mr','ms']]){if(!surfaces[k]||!c.q||!n||(!c[k]&&!c[sh]))continue;const itemLabel=room.materialLabel&&k==='w'?room.materialLabel:label;const id=k+':'+sizes[size]+':'+itemLabel,row=rows.get(id)||{label:itemLabel,area:0,size:sizes[size],sheets:0};row.area+=c[k]*c.q*n;row.sheets+=c[sh]*c.q*n;rows.set(id,row);}}}return [...rows.values()];}
+function sheetRows(t,A,surfaces){const rows=new Map();for(const block of [...t.units,...t.groups]){const ctr=block.u||block.g,n=block.u?block.n:1;for(const room of ctr.rooms){const c=roomCalc(room,A,ctr.h),sizes=sheetAssume(room,A);if(Array.isArray(room.wallItems)){for(const item of room.wallItems){const v=wallItemCalc(item,room,A,ctr.h);if(!surfaces[v.kind]||!c.q||!n||!v.sheets)continue;const label=(v.kind==='m'?'MR':'Walls')+(item.thickness?' · '+item.thickness+' inch':' · thickness not specified'),id=v.kind+':'+v.size+':'+label,row=rows.get(id)||{label,area:0,size:v.size,sheets:0};row.area+=v.area*c.q*n;row.sheets+=v.sheets*c.q*n;rows.set(id,row);}}for(const [label,k,size,sh] of [['Walls','w','wall','ws'],['Ceiling','c','clg','cs'],['MR','m','mr','ms']]){if((Array.isArray(room.wallItems)&&k!=='c')||!surfaces[k]||!c.q||!n||(!c[k]&&!c[sh]))continue;const itemLabel=room.materialLabel&&k==='w'?room.materialLabel:label;const id=k+':'+sizes[size]+':'+itemLabel,row=rows.get(id)||{label:itemLabel,area:0,size:sizes[size],sheets:0};row.area+=c[k]*c.q*n;row.sheets+=c[sh]*c.q*n;rows.set(id,row);}}}return [...rows.values()];}
 function ceilingHTML(r){
   const c=ceilingCalc(r);
   return`<section class="ceiling-panel" aria-label="Ceiling calculation">
@@ -693,6 +705,7 @@ function refreshAll(){
     const loc=locate(el.dataset.id);if(!loc)return;
     const r=loc.list[loc.idx],hd=loc.ctr.h,hdv=parseLen(hd);
     const c=roomCalc(r,A,hd),sizes=sheetAssume(r,A);
+    el.querySelectorAll('[data-wall-result]').forEach(o=>{const item=r.wallItems?.find(i=>i.id===o.dataset.wallResult);if(item){const n=wallItemCalc(item,r,A,hd);o.textContent=(item.mode==='sheets'?'Final quantity':`${fmt(n.area)} ft²`)+` · ${fmt0(n.sheets)} sheets`;}});
     const set=(k,v)=>{const o=el.querySelector(`[data-o="${k}"]`);if(o)o.textContent=v;};
     set('sheet-sizes',`Sheets: Walls ${sizes.wall} / Ceiling ${sizes.clg} / MR ${sizes.mr} ft²`);
     set('per',fmt0(c.per));set('tot',fmt0(c.tot));
@@ -753,6 +766,7 @@ document.addEventListener('input',e=>{
   else if(el.dataset.a){p.assume[el.dataset.a]=el.dataset.a==='waste'?(val(el.value)/100):val(el.value);}
   else if(el.dataset.m){const[i,k]=el.dataset.m.split('.');p.mats[+i][k]=val(el.value);}
   else if(el.dataset.c){const cur=activeCtr(p,tab);if(!cur)return;cur[el.dataset.c]=el.value;if(tab==='units'&&el.dataset.c==='count'){const min=registeredUnits(p).filter(e=>e.typeId===cur.id).length;if(val(cur.count)<min){cur.count=String(min);el.value=cur.count;toast('Count cannot be less than the registered apartments.');}}$('#ctrBar').innerHTML=ctrBarHTML(p,tab);}
+  else if(el.dataset.wi){const r=findRoom(el.closest('.room').dataset.id),item=r.wallItems.find(i=>i.id===el.closest('[data-wall-item]').dataset.wallItem);item[el.dataset.wi]=el.value;if(['mode','kind'].includes(el.dataset.wi)){el.closest('.room').outerHTML=roomHTML(r);}}
   else if(el.dataset.manualSheet){const r=findRoom(el.closest('.room').dataset.id);r.manualSheets=r.manualSheets||{};r.manualSheets[el.dataset.manualSheet]=el.value;}
   else if(el.dataset.sheetSize){const r=findRoom(el.closest('.room').dataset.id);r.sheetSizes=r.sheetSizes||{};if(el.value)r.sheetSizes[el.dataset.sheetSize]=+el.value;else delete r.sheetSizes[el.dataset.sheetSize];}
   else if(el.dataset.f){const room=el.closest('.room');const r=findRoom(room.dataset.id);r[el.dataset.f]=el.type==='checkbox'?el.checked:el.value;}
@@ -808,6 +822,9 @@ document.addEventListener('click',async e=>{
   const room=b.closest('.room');if(!room)return;
   const id=room.dataset.id,loc=locate(id);if(!loc)return;
   const list=loc.list,idx=loc.idx;
+  if(b.dataset.act==='splitwalls'){splitRoomWalls(list[idx],p.assume,loc.ctr.h);touch();room.outerHTML=roomHTML(list[idx]);refreshAll();return;}
+  if(b.dataset.act==='addwall'){list[idx].wallItems.push({id:uid(),name:'New wall',kind:'wall',mode:'lf',value:'',height:'',size:'',thickness:'',notes:''});touch();room.outerHTML=roomHTML(list[idx]);refreshAll();return;}
+  if(b.dataset.act==='delwall'){if(!arm(b,'Confirm removal'))return;list[idx].wallItems=list[idx].wallItems.filter(i=>i.id!==b.dataset.itemId);touch();room.outerHTML=roomHTML(list[idx]);refreshAll();return;}
   if(b.dataset.ceilingMode){
     const r=list[idx];
     if(b.dataset.ceilingMode==='dimensions'&&ceilingCalc(r).mode==='room'&&r.clgL===undefined&&r.clgW===undefined){r.clgL=r.L||'';r.clgW=r.W||'';}
@@ -916,6 +933,7 @@ async function exportXlsx(){
       else if(r.mode==='dim')C('L'+row,`${lenTxt(c.L)} × ${lenTxt(c.W)} × h ${lenTxt(c.H)}${r.mrWalls?' (MR walls)':''}`);
       else{const parts=[['W',r.walls],['C',r.clg],['MR',r.mr]].filter(([,v])=>isExpr(v)).map(([k,v])=>`${k}: ${v}`);if(parts.length)C('L'+row,parts.join('  '));}
       if(r.mode==='sheets'){C('D'+row,null);C('F'+row,null);C('H'+row,null);C('E'+row,c.ws);C('G'+row,c.cs);C('I'+row,c.ms);C('L'+row,`Manual sheets — no recalculation. ${r.materialLabel||''} ${r.manualNotes||''}`);}
+      if(Array.isArray(r.wallItems)){C('D'+row,c.w||null);C('H'+row,c.m||null);C('E'+row,c.ws);C('I'+row,c.ms);C('L'+row,r.wallItems.map(i=>{const v=wallItemCalc(i,r,A,b.h);return `${i.name}: ${i.kind}; ${i.value||'pending'} ${i.mode}; height ${i.height||'default'}; sheet ${v.size} ft²; thickness ${i.thickness||'not specified'}; ${v.sheets} sheets`;}).join(' | '));}
       const ceilingNote=r.mode==='sheets'?'Manual quantities; no area conversion or extra waste':ceiling.mode==='area'?`Ceiling area: ${fmt(ceiling.area)} ft²`:`Ceiling: ${lenTxt(ceiling.L)} × ${lenTxt(ceiling.W)} = ${fmt(ceiling.area)} ft²`;
       for(let cc=2;cc<=12;cc++){const cell=ws.getCell(row,cc);cell.border=box;if([3,4,6,8].includes(cc))cell.fill=inFill;if([4,6,8].includes(cc))cell.numFmt='#,##0.0';}
       ws.getCell('L'+row).font={color:{argb:'FF5A6775'},size:9};
@@ -942,7 +960,8 @@ async function exportXlsx(){
   ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
 
   try{
-    const buf=await wb.xlsx.writeBuffer();
+    const breakdown=wb.addWorksheet('Sheet breakdown');breakdown.columns=[{width:40},{width:20},{width:20},{width:20}];breakdown.addRow(['Material / thickness','Sheet size ft²','Area ft²','Final sheets']);sheetRows(t,A,{w:true,c:true,m:true}).forEach(x=>breakdown.addRow([x.label,x.size,x.area,x.sheets]));
+  const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const fname=`Takeoff - ${(p.name||'Project').replace(/[\\/:*?"<>|]/g,'-')}.xlsx`;
     const url=URL.createObjectURL(blob);

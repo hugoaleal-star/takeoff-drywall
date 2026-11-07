@@ -1,9 +1,9 @@
-# Actualizar
+# Versión 17 — partidas de paredes
 
-El servidor Cloudflare está publicado y su base D1 conectada. Subir index.html, sw.js y documentación de esta versión a la raíz del repositorio, manteniendo icons y vendor. Esperar el despliegue de Pages y abrir la aplicación con conexión. Cerrar todas sus ventanas y volver a abrir para activar el nuevo service worker.
+En cada habitación, pulse Edit y después “Separate walls into independent entries”. Se conservan las medidas, cantidades manuales y tamaños existentes al separar Walls y MR. Use “+ Add wall entry” para añadir partidas.
 
-Conservar la misma dirección y la clave local takeoff_drywall_v1. No borrar datos del navegador: contienen cambios pendientes. Caché: takeoff-drywall-v15.
+Cada partida permite material Standard o MR, altura propia, tamaño de hoja, espesor, notas y método LF, ft² o cantidad final de hojas. La altura solo multiplica LF. Las hojas manuales no reciben desperdicio adicional. El techo conserva su entrada independiente.
 
-Para cambios de servidor, editar worker.js en Cloudflare y mantener el binding DB a la base existente. No recrear ni borrar la base. La estructura está en servidor/schema.sql del paquete entregado.
+Las solicitudes y la pestaña “Sheet breakdown” del Excel separan material, tamaño y espesor. Los datos existentes no se convierten hasta pulsar el botón.
 
-Versión 15: cada habitación de las unidades permite elegir hojas independientes para Walls, Ceiling y MR, igual que las áreas comunes.
+Publicar index.html y sw.js. Caché: takeoff-drywall-v17. Abrir ?v=17; cerrar y volver a abrir las ventanas de la aplicación para activar la nueva caché. No borrar los datos del navegador.
