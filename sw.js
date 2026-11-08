@@ -1,4 +1,4 @@
-const CACHE='takeoff-drywall-v55';
+const CACHE='takeoff-drywall-v56';
 const ASSETS=['./','./index.html','./lackey-logo.png','./manifest.webmanifest','./vendor/exceljs.min.js','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(path=>new Request(path,{cache:'reload'})))).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('takeoff-drywall-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
