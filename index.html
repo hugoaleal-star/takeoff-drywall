@@ -666,9 +666,19 @@ function renderHome(){
     </div>`;}).join('')}</div>`
   :!loaded?`<div class="empty"><p><b>Loading projects…</b></p></div>`:`<div class="empty"><p><b>No projects yet.</b></p><p>Tap “New project” to start a shared takeoff. Projects save to the shared online workspace as you type.</p></div>`}`;
 }
+
+function applyPreparedUpdate(p,update,projectId){
+ if(update.format!=='takeoff-prepared-update-v1'||update.projectId!==projectId||!Array.isArray(update.changes)||update.changes.length>500)throw Error('This update does not match this project.');
+ const equal=(a,b)=>JSON.stringify(a??null)===JSON.stringify(b??null),targets=update.changes.map(c=>{const target=c.kind==='unit'?registeredUnits(p).find(x=>x.id===c.id):c.kind==='common'?p.groups.flatMap(g=>g.rooms).find(x=>x.id===c.id):null;if(!target)throw Error('Missing record: '+c.label);const current=c.kind==='unit'?{areas:target.areas??null,extraRooms:target.extraRooms??null}:target;if(!equal(current,c.before))throw Error('Record changed since preparation: '+c.label+'. Prepare a fresh update.');if(c.kind==='unit'&&(!c.after.areas||!Array.isArray(c.after.extraRooms)))throw Error('Invalid unit update.');if(c.kind==='common'&&(c.after.id!==c.id||!c.after.name))throw Error('Invalid area update.');return {c,target};});
+ for(const {c,target} of targets){if(c.kind==='unit'){target.areas=clean(c.after.areas);target.extraRooms=clean(c.after.extraRooms);}else{for(const k of Object.keys(target))delete target[k];Object.assign(target,clean(c.after));}}
+ p.preparedUpdateHistory=p.preparedUpdateHistory||[];p.preparedUpdateHistory.push({source:update.source,date:new Date().toISOString(),records:update.changes.length,changes:clean(update.changes)});return targets.length;
+}
+document.addEventListener('change',async e=>{if(e.target.id!=='prepared-update-file')return;const p=projects[currentId],file=e.target.files?.[0];if(!p||!file)return;const previous=clean(p);try{const update=JSON.parse(await file.text()),n=applyPreparedUpdate(p,update,currentId);if(!touch()){projects[currentId]=previous;throw Error('Could not save. Update cancelled.');}render();toast(n+' records updated. Other project data preserved.');}catch(error){projects[currentId]=previous;toast(error.message);}e.target.value='';});
+
 function projectHTML(p){
   const A=p.assume;
   return`<div class="sec-head"><div><h2>Project info</h2><p>Project name and calculation assumptions.</p></div></div>
+  <details class="panel"><summary>Import prepared update</summary><p class="note">Load a prepared JSON update for this project. Changed records are checked before applying; other records stay unchanged.</p><label class="field"><span class="lbl">Prepared update file</span><input type="file" id="prepared-update-file" accept=".json,application/json"></label>${p.preparedUpdateHistory?.length?`<p>Last update: ${esc(p.preparedUpdateHistory.at(-1).source)} · ${p.preparedUpdateHistory.at(-1).records} records</p>`:''}</details>
   <div class="panel"><div class="grid g2">
     ${pf('name','Project name',p.name)}${pf('address','Delivery address',p.address)}
   </div></div>
