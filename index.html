@@ -690,7 +690,7 @@ function sectionHTML(p,t){
   const cur=activeCtr(p,t);
   const isU=t==='units';
   const head=`<div class="sec-head"><div><h2>${isU?'Unit types':'Common areas'}</h2><p>${isU?'Enter the rooms of ONE unit of each type. They are multiplied by that type’s unit count.':'Choose a building, such as Clubhouse. Add its common areas below and give each area its own name.'}</p></div></div>
-  <div class="ctr-bar" id="ctrBar">${ctrBarHTML(p,t)}</div>`;
+  <div class="ctr-bar" id="ctrBar">${ctrBarHTML(p,t)}</div>${isU&&p.deletedUnitTypes?.length?'<button class="btn sm" data-act="restoretype">Restore last deleted unit type</button>':''}`;
   if(!cur)return head+`<div class="empty">${isU?'No unit types yet. Tap “+ Unit type” to add Unit A.':'No buildings yet. Tap “+ Building” to add one.'}</div>`;
   const list=cur.rooms;
   return head+`
@@ -907,10 +907,12 @@ document.addEventListener('click',async e=>{
     list.splice(list.indexOf(cur)+1,0,c);active[tab]=c.id;touch();render();toast('Duplicated — rename it and adjust');
     setTimeout(()=>{const n=$('#c-name');n&&(n.focus(),n.select());},50);return;
   }
+  if(b.dataset.act==='restoretype'){const backup=(p.deletedUnitTypes||[]).pop();if(!backup)return;if(p.unitTypes.some(t=>t.id===backup.type.id)){p.deletedUnitTypes.push(backup);toast('This type already exists.');return;}p.unitTypes.push(backup.type);p.unitRegister=[...registeredUnits(p),...backup.entries.filter(e=>!registeredUnits(p).some(x=>x.id===e.id))];active.units=backup.type.id;touch();render();toast('Unit type and linked apartments restored.');return;}
   if(b.dataset.act==='delctr'){
-    if(!arm(b,'Sure? Tap again',null,'primary'))return;
     const list=ctrList(p,tab),cur=activeCtr(p,tab);if(!cur)return;
-    if(tab==='units'&&registeredUnits(p).some(e=>e.typeId===cur.id)){toast('This type has registered apartments. Remove their numbers from the register first.');return;}
+    const linked=tab==='units'?registeredUnits(p).filter(e=>e.typeId===cur.id).length:0;
+    if(!arm(b,linked?'Confirm delete type + '+linked+' linked apartment(s)':'Sure? Tap again',null,'primary'))return;
+    if(tab==='units'){p.deletedUnitTypes=p.deletedUnitTypes||[];p.deletedUnitTypes.push({type:clean(cur),entries:clean(registeredUnits(p).filter(e=>e.typeId===cur.id)),deletedAt:Date.now()});p.unitRegister=registeredUnits(p).filter(e=>e.typeId!==cur.id);}
     list.splice(list.indexOf(cur),1);active[tab]=null;touch();render();toast(`${cur.name||'Group'} deleted`);return;
   }
   if(b.dataset.chip||b.dataset.act==='add'){addRoom(p,b.dataset.chip||'');return;}
