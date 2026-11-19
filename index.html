@@ -991,6 +991,7 @@ document.addEventListener('click',async e=>{
     const r=list[idx];
     if(!String(r.name||'').trim()){const n=document.getElementById(`r-${r.id}-name`);n&&n.focus();toast('Name the room before saving it');return;}
     r.done=true;if(!touch()){r.done=false;toast('Could not save. Export Excel before closing.');return;}
+    if(tab==='common'&&b.dataset.act==='done'){selectedCommonArea=null;const dialog=$('#common-area-dialog');if(dialog.open)dialog.close();render();toast(`${r.name} saved ✓`);return;}
     room.outerHTML=roomHTML(r);refreshAll();
     toast(`${r.name} saved ✓`);
     if(b.dataset.act==='donenext')addRoom(p,'');
